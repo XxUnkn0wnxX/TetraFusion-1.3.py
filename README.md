@@ -41,7 +41,7 @@ TetraFusion is a modern take on the classic Tetris game, implemented using Pytho
 
 Run the main script:
 ```bash
-python main.py
+TetraFusion 1.3.py
 ```
 
 ## Controls
