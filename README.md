@@ -94,7 +94,8 @@ If the file is not found, it will be created automatically.
 
 ## Screenshots
 
-_Add screenshots here to showcase the game._
+![Screenshot 2025-01-23 102706](https://github.com/user-attachments/assets/075d9ce5-6bc6-40c7-a9d3-6e83d5a62436)
+
 
 ## Contributing
 Wayne
