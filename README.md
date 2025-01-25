@@ -1,4 +1,4 @@
-# TetraFusion 1.3
+# TetraFusion
 
 TetraFusion is a modern take on the classic Tetris game, implemented using Python and Pygame. The game features 2.5D graphics, dynamic particle effects, background music, and a user-friendly interface.
 
@@ -21,6 +21,8 @@ TetraFusion is a modern take on the classic Tetris game, implemented using Pytho
 1. Clone this repository:
    ```bash
    git clone https://github.com/drDOOM69GAMING/TetraFusion 1.3.py.git
+   git clone https://github.com/drDOOM69GAMING/TetraFusion 1.4.py.git
+   git clone https://github.com/drDOOM69GAMING/TetraFusion 1.5.py.git
    cd tetrafusion
    ```
 
@@ -36,12 +38,16 @@ TetraFusion is a modern take on the classic Tetris game, implemented using Pytho
      - Line clear sound: `Audio/Lineclear.ogg`
      - Multiple line clear sound: `Audio/MultipleLineclear.ogg`
      - Game over sound: `Audio/GAMEOVER.ogg`
+     - ## Version 1.5 only supports this.
+     - Dramatic grid filling sound: `Audio/heartbeat_grid_almost_full.ogg` 
 
 ## How to Run
 
 Run the main script:
 ```bash
 TetraFusion 1.3.py
+TetraFusion 1.4.py
+TetraFusion 1.5.py
 ```
 
 ## Controls
