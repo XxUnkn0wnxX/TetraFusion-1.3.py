@@ -8,8 +8,10 @@ TetraFusion is a modern take on the classic Tetris game, implemented using Pytho
 - **Dynamic Particle Effects**: Visual effects triggered by actions like block placement.
 - **Music and Sound Effects**: Background music and sound effects enhance the gaming experience.
 - **High Score Tracking**: Save and load high scores with player initials.
-- **Customizable Game Assets**: Easily replace assets like fonts and sounds.
+- **Customizable Game Settings**: Adjust grid opacity, key bindings, and difficulty.
+- **Flame Trail Effects**: Dynamic effects when moving pieces.
 - **Subwindow with Stats**: Displays real-time game statistics like score, level, and upcoming tetromino.
+- **Smooth User Experience**: Optimized performance with pre-rendered grid and enhanced game flow.
 
 ## Requirements
 
@@ -20,8 +22,8 @@ TetraFusion is a modern take on the classic Tetris game, implemented using Pytho
 
 1. Clone this repository:
    ```bash
-   git clone https://github.com/drDOOM69GAMING/TetraFusion 1.5.py.git
-   cd tetrafusion
+   git clone https://github.com/drDOOM69GAMING/TetraFusion 1.8.0.git
+   cd TetraFusion
    ```
 
 2. Install dependencies:
@@ -30,22 +32,19 @@ TetraFusion is a modern take on the classic Tetris game, implemented using Pytho
    ```
 
 3. Ensure the required assets (e.g., fonts, audio files) are in the correct directories:
-   - Fonts: `assets/tetris-blocks.TTF`
-   - Audio:
+   - **Fonts:** `assets/tetris-blocks.TTF`
+   - **Audio:**
      - Background music: `Audio/Background.ogg`
      - Line clear sound: `Audio/Lineclear.ogg`
      - Multiple line clear sound: `Audio/MultipleLineclear.ogg`
      - Game over sound: `Audio/GAMEOVER.ogg`
-     - ## Version 1.5 only supports this.
-     - Dramatic grid filling sound: `Audio/heartbeat_grid_almost_full.ogg` 
+     - Dramatic grid filling sound: `Audio/heartbeat_grid_almost_full.ogg`
 
 ## How to Run
 
 Run the main script:
 ```bash
-TetraFusion 1.3.py
-TetraFusion 1.4.py
-TetraFusion 1.5.py
+python "TetraFusion 1.8.0.py"
 ```
 
 ## Controls
@@ -55,7 +54,6 @@ TetraFusion 1.5.py
 - **R**: Restart the game.
 - **M**: Return to the main menu.
 - **Enter**: Start the game from the main menu.
-
 
 ### Main Menu
 - Displays the title and instructions to start the game.
@@ -76,6 +74,9 @@ Edit the `COLORS` list to change tetromino colors.
 ```python
 COLORS = [(0, 255, 255), (255, 165, 0), (0, 0, 255), (255, 0, 0), (0, 255, 0), (255, 255, 0), (128, 0, 128)]
 ```
+
+### Adjust Grid Opacity
+In the **options menu**, you can adjust grid opacity from **0 (invisible) to 192 (semi-transparent).**
 
 ### Replace Audio
 Replace files in the `Audio` directory with your own `.ogg` files.
@@ -98,7 +99,7 @@ If the file is not found, it will be created automatically.
 
 ## Screenshots
 
-![Screenshot 2025-01-23 102706](https://github.com/user-attachments/assets/075d9ce5-6bc6-40c7-a9d3-6e83d5a62436)
+![Screenshot 2025-01-31 103638](https://github.com/user-attachments/assets/f3605dd9-4ffd-42de-a169-ca6782b672f1)
 
 
 ## Contributing
@@ -124,6 +125,7 @@ Contributions are welcome! Please follow these steps:
 
 This project is licensed under the MIT License. See the `LICENSE` file for details.
 
+```
 MIT License
 
 Copyright (c) [2025] [Wayne]
@@ -145,7 +147,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
+```
 
 ## Acknowledgments
 
