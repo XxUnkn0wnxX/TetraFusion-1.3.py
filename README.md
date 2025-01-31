@@ -22,7 +22,7 @@ TetraFusion is a modern take on the classic Tetris game, implemented using Pytho
 
 1. Clone this repository:
    ```bash
-   https://github.com/drDOOM69GAMING/TetraFusion-1.3.py.git
+   git clone https://github.com/drDOOM69GAMING/TetraFusion-1.3.py.git
    cd TetraFusion-1.3.py
 
    ```
