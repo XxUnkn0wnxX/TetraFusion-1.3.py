@@ -2,6 +2,7 @@ import pygame
 import random
 import sys
 import os
+import json
 import math
 import json
 import glob
@@ -49,6 +50,39 @@ def update_custom_music_playlist(settings):
         current_track_index = 0
     else:
         custom_music_playlist = []
+
+# macOS Dialog Thing
+if sys.platform == "darwin":
+    try:
+        from AppKit import NSOpenPanel
+    except ImportError:
+        NSOpenPanel = None
+
+    def select_music_directory():
+        if NSOpenPanel is None:
+            # Fallback to tkinter if PyObjC isn't available.
+            root = tk.Tk()
+            root.withdraw()
+            selected = filedialog.askdirectory()
+            root.destroy()
+            return selected
+        panel = NSOpenPanel.openPanel()
+        panel.setCanChooseFiles_(False)
+        panel.setCanChooseDirectories_(True)
+        panel.setAllowsMultipleSelection_(False)
+        # runModal returns 1 if the user clicked OK.
+        if panel.runModal() == 1:
+            # Convert the NSURL to a path.
+            return panel.URL().path()
+        return ""
+else:
+    # For non-macOS platforms, use tkinter's filedialog.
+    def select_music_directory():
+        root = tk.Tk()
+        root.withdraw()
+        selected = filedialog.askdirectory()
+        root.destroy()
+        return selected
 
 # -------------------------- Constants --------------------------
 SCREEN_WIDTH = 450
@@ -137,6 +171,12 @@ def load_settings(filename="settings.json"):
         'use_custom_music': False,
         'music_directory': ""
     }
+    
+    # Check if the settings file exists. If not, create it with the default settings.
+    if not os.path.exists(filename):
+        save_settings(default_settings, filename)
+        return default_settings
+        
     try:
         with open(filename, "r") as file:
             saved_settings = json.load(file)
@@ -680,15 +720,12 @@ def options_menu():
                                 pygame.mixer.music.play(-1)
                             except Exception as e:
                                 print(f"Error loading default music: {e}")
-                    elif current_key=='select_music_dir':
-                        root = tk.Tk()
-                        root.withdraw()
-                        selected_dir = filedialog.askdirectory()
+                    elif current_key == 'select_music_dir':
+                        selected_dir = select_music_directory()
                         if selected_dir:
                             settings['music_directory'] = selected_dir
                             if settings.get('use_custom_music', False):
-                                play_custom_music(settings)
-                        root.destroy()
+                                 play_custom_music(settings)
                     elif current_key=='back':
                         save_settings(settings)
                         return
@@ -965,15 +1002,12 @@ def options_menu():
                                 pygame.mixer.music.play(-1)
                             except Exception as e:
                                 print(f"Error loading default music: {e}")
-                    elif current_key=='select_music_dir':
-                        root = tk.Tk()
-                        root.withdraw()
-                        selected_dir = filedialog.askdirectory()
+                    elif current_key == 'select_music_dir':
+                        selected_dir = select_music_directory()
                         if selected_dir:
                             settings['music_directory'] = selected_dir
                             if settings.get('use_custom_music', False):
-                                play_custom_music(settings)
-                        root.destroy()
+                                 play_custom_music(settings)
                     elif current_key=='back':
                         save_settings(settings)
                         return
@@ -1250,15 +1284,12 @@ def options_menu():
                                 pygame.mixer.music.play(-1)
                             except Exception as e:
                                 print(f"Error loading default music: {e}")
-                    elif current_key=='select_music_dir':
-                        root = tk.Tk()
-                        root.withdraw()
-                        selected_dir = filedialog.askdirectory()
+                    elif current_key == 'select_music_dir':
+                        selected_dir = select_music_directory()
                         if selected_dir:
                             settings['music_directory'] = selected_dir
                             if settings.get('use_custom_music', False):
-                                play_custom_music(settings)
-                        root.destroy()
+                                 play_custom_music(settings)
                     elif current_key=='back':
                         save_settings(settings)
                         return
@@ -1534,15 +1565,13 @@ def options_menu():
                                 pygame.mixer.music.play(-1)
                             except Exception as e:
                                 print(f"Error loading default music: {e}")
-                    elif current_key=='select_music_dir':
-                        root = tk.Tk()
-                        root.withdraw()
-                        selected_dir = filedialog.askdirectory()
+                    elif current_key == 'select_music_dir':
+                        selected_dir = select_music_directory()
                         if selected_dir:
                             settings['music_directory'] = selected_dir
                             if settings.get('use_custom_music', False):
-                                play_custom_music(settings)
-                        root.destroy()
+                                 play_custom_music(settings)
+
                     elif current_key=='back':
                         save_settings(settings)
                         return
