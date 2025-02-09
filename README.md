@@ -7,11 +7,15 @@ TetraFusion is a modern take on the classic Tetris game, implemented using Pytho
 - **2.5D Block Rendering**: Each Tetris block is rendered with a 3D-like perspective.
 - **Dynamic Particle Effects**: Visual effects triggered by actions like block placement.
 - **Music and Sound Effects**: Background music and sound effects enhance the gaming experience.
+- **Custom Music Playlist Support**: Users can enable a custom playlist by selecting a directory with `.mp3`, `.wav`, `.flac`, `.ogg`, `.aac`, or `.m4a` files.
+- **Ghost Piece (Drop Shadow)**: A transparent "ghost piece" shows where the tetromino will land. ## Broken Feature
 - **High Score Tracking**: Save and load high scores with player initials.
 - **Customizable Game Settings**: Adjust grid opacity, key bindings, and difficulty.
 - **Flame Trail Effects**: Dynamic effects when moving pieces.
-- **Subwindow with Stats**: Displays real-time game statistics like score, level, and upcoming tetromino.
+- **Subwindow with Stats & Controls**: Displays real-time game statistics, volume control, and track skipping.
 - **Smooth User Experience**: Optimized performance with pre-rendered grid and enhanced game flow.
+- **Tetris Flash Effect**: A visual flash occurs when a player clears four lines.
+- **New Difficulty Settings**: Includes an extra "Very Hard" mode.
 
 ## Requirements
 
@@ -24,7 +28,6 @@ TetraFusion is a modern take on the classic Tetris game, implemented using Pytho
    ```bash
    git clone https://github.com/drDOOM69GAMING/TetraFusion-1.3.py.git
    cd TetraFusion-1.3.py
-
    ```
 
 2. Install dependencies:
@@ -45,16 +48,18 @@ TetraFusion is a modern take on the classic Tetris game, implemented using Pytho
 
 Run the main script:
 ```bash
-python "TetraFusion 1.8.0.py"
+python "TetraFusion 1.8.2.py"
 ```
 
 ## Controls
 
 - **Arrow Keys**: Move and rotate the tetromino.
+- **Space**: Hard drop.
 - **P**: Pause the game.
 - **R**: Restart the game.
 - **M**: Return to the main menu.
 - **Enter**: Start the game from the main menu.
+- **Mouse Click (Subwindow)**: Adjust volume and skip tracks.
 
 ### Main Menu
 - Displays the title and instructions to start the game.
@@ -76,8 +81,10 @@ Edit the `COLORS` list to change tetromino colors.
 COLORS = [(0, 255, 255), (255, 165, 0), (0, 0, 255), (255, 0, 0), (0, 255, 0), (255, 255, 0), (128, 0, 128)]
 ```
 
-### Adjust Grid Opacity
-In the **options menu**, you can adjust grid opacity from **0 (invisible) to 192 (semi-transparent).**
+### Adjust Grid Opacity & Visibility
+In the **options menu**, you can:
+- Adjust grid opacity from **0 (invisible) to 192 (semi-transparent).**
+- Toggle grid lines on/off.
 
 ### Replace Audio
 Replace files in the `Audio` directory with your own `.ogg` files.
@@ -89,6 +96,9 @@ SCREEN_WIDTH = 450
 SCREEN_HEIGHT = 930
 BLOCK_SIZE = 30
 ```
+
+### Enable Custom Music Playlist
+To enable custom music, go to the **options menu** and select a folder containing supported music files.
 
 ## High Score System
 
@@ -102,9 +112,7 @@ If the file is not found, it will be created automatically.
 
 ![Screenshot 2025-01-31 103638](https://github.com/user-attachments/assets/f3605dd9-4ffd-42de-a169-ca6782b672f1)
 
-
 ## Contributing
-Wayne
 
 Contributions are welcome! Please follow these steps:
 1. Fork the repository.
@@ -129,8 +137,6 @@ This project is licensed under the MIT License. See the `LICENSE` file for detai
 ```
 MIT License
 
-Copyright (c) [2025] [Wayne]
-
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -138,16 +144,7 @@ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 ```
 
 ## Acknowledgments
