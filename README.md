@@ -8,7 +8,7 @@ TetraFusion is a modern take on the classic Tetris game, implemented using Pytho
 - **Dynamic Particle Effects**: Visual effects triggered by actions like block placement.
 - **Music and Sound Effects**: Background music and sound effects enhance the gaming experience.
 - **Custom Music Playlist Support**: Users can enable a custom playlist by selecting a directory with `.mp3`, `.wav`, `.flac`, `.ogg`, `.aac`, or `.m4a` files.
-- **Ghost Piece (Drop Shadow)**: A transparent "ghost piece" shows where the tetromino will land. ## Broken Feature
+- **Ghost Piece (Drop Shadow)**: A transparent "ghost piece" shows where the tetromino will land. **Broken Feature
 - **High Score Tracking**: Save and load high scores with player initials.
 - **Customizable Game Settings**: Adjust grid opacity, key bindings, and difficulty.
 - **Flame Trail Effects**: Dynamic effects when moving pieces.
