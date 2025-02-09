@@ -725,7 +725,7 @@ def options_menu():
                         if selected_dir:
                             settings['music_directory'] = selected_dir
                             if settings.get('use_custom_music', False):
-                                 play_custom_music(settings)
+                                play_custom_music(settings)
                     elif current_key=='back':
                         save_settings(settings)
                         return
@@ -1007,7 +1007,7 @@ def options_menu():
                         if selected_dir:
                             settings['music_directory'] = selected_dir
                             if settings.get('use_custom_music', False):
-                                 play_custom_music(settings)
+                                play_custom_music(settings)
                     elif current_key=='back':
                         save_settings(settings)
                         return
@@ -1289,7 +1289,7 @@ def options_menu():
                         if selected_dir:
                             settings['music_directory'] = selected_dir
                             if settings.get('use_custom_music', False):
-                                 play_custom_music(settings)
+                                play_custom_music(settings)
                     elif current_key=='back':
                         save_settings(settings)
                         return
@@ -1570,8 +1570,7 @@ def options_menu():
                         if selected_dir:
                             settings['music_directory'] = selected_dir
                             if settings.get('use_custom_music', False):
-                                 play_custom_music(settings)
-
+                                play_custom_music(settings)
                     elif current_key=='back':
                         save_settings(settings)
                         return
