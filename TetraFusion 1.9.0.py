@@ -50,6 +50,42 @@ def update_custom_music_playlist(settings):
         current_track_index = 0
     else:
         custom_music_playlist = []
+        
+
+# macOS Dialog Thing
+
+if sys.platform == "darwin":
+    try:
+        from AppKit import NSOpenPanel
+    except ImportError:
+        NSOpenPanel = None
+
+    def select_music_directory():
+        # Use NSOpenPanel on macOS if available.
+        if NSOpenPanel is None:
+            # Fallback if PyObjC is not installed.
+            root = tk.Tk()
+            root.withdraw()
+            selected = filedialog.askdirectory()
+            root.destroy()
+            return selected
+        panel = NSOpenPanel.openPanel()
+        panel.setCanChooseFiles_(False)
+        panel.setCanChooseDirectories_(True)
+        panel.setAllowsMultipleSelection_(False)
+        if panel.runModal() == 1:
+            # panel.URL() returns an NSURL; we need its path.
+            return panel.URL().path()
+        return ""
+else:
+    # On non-macOS, simply use tkinter's filedialog.
+    def select_music_directory():
+        root = tk.Tk()
+        root.withdraw()
+        selected = filedialog.askdirectory()
+        root.destroy()
+        return selected
+
 
 # -------------------------- Constants --------------------------
 SCREEN_WIDTH = 450
@@ -167,6 +203,7 @@ def load_settings(filename="settings.json"):
     }
 
     if not os.path.exists(filename):
+        save_settings(default_settings, filename) # save defaults to file if no file exists
         return default_settings  # Return defaults if no file exists
 
     try:
@@ -1036,15 +1073,13 @@ def options_menu():
                                 pygame.mixer.music.play(-1)
                             except Exception as e:
                                 print(f"Error loading default music: {e}")
-                    elif current_key=='select_music_dir':
-                        root = tk.Tk()
-                        root.withdraw()
-                        selected_dir = filedialog.askdirectory()
+                    # macOS Helper
+                    elif current_key == 'select_music_dir':
+                        selected_dir = select_music_directory()
                         if selected_dir:
                             settings['music_directory'] = selected_dir
                             if settings.get('use_custom_music', False):
                                 play_custom_music(settings)
-                        root.destroy()
                     elif current_key=='back':
                         save_settings(settings)
                         return
@@ -1304,15 +1339,13 @@ def options_menu():
                                 pygame.mixer.music.play(-1)
                             except Exception as e:
                                 print(f"Error loading default music: {e}")
-                    elif current_key=='select_music_dir':
-                        root = tk.Tk()
-                        root.withdraw()
-                        selected_dir = filedialog.askdirectory()
+                    # macOS Helper
+                    elif current_key == 'select_music_dir':
+                        selected_dir = select_music_directory()
                         if selected_dir:
                             settings['music_directory'] = selected_dir
                             if settings.get('use_custom_music', False):
                                 play_custom_music(settings)
-                        root.destroy()
                     elif current_key=='back':
                         save_settings(settings)
                         return
@@ -1571,15 +1604,13 @@ def options_menu():
                                 pygame.mixer.music.play(-1)
                             except Exception as e:
                                 print(f"Error loading default music: {e}")
-                    elif current_key=='select_music_dir':
-                        root = tk.Tk()
-                        root.withdraw()
-                        selected_dir = filedialog.askdirectory()
+                    # macOS Helper   
+                    elif current_key == 'select_music_dir':
+                        selected_dir = select_music_directory()
                         if selected_dir:
                             settings['music_directory'] = selected_dir
                             if settings.get('use_custom_music', False):
                                 play_custom_music(settings)
-                        root.destroy()
                     elif current_key=='back':
                         save_settings(settings)
                         return
