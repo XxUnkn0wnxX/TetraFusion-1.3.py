@@ -635,9 +635,9 @@ def draw_ghost_piece(tetromino, offset, grid):
         ghost_y += 1
     ghost_offset = [offset[0], ghost_y]
 
-    # Set opacity: 10% opaque (i.e. 70% transparent)
-    ghost_fill_alpha = int(255 * 0.1)      # Approximately 77 (adjust as needed)
-    ghost_outline_alpha = int(255 * 0.1)     # Approximately 77
+    # Set opacity: 10% opaque
+    ghost_fill_alpha = int(255 * 0.1)      # (adjust as needed)
+    ghost_outline_alpha = int(255 * 0.1)     # (adjust as needed)
 
     # Draw the entire ghost tetromino at its landing position.
     for cy, row in enumerate(tetromino):
