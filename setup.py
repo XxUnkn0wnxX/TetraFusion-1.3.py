@@ -1,38 +1,61 @@
 import sys
 from cx_Freeze import setup, Executable
-import os
 
-# Define the script and any necessary files (like assets, audio files, and the high score file)
-script = "TetraFusion 1.3.py"
-audio_folder = "Audio"
-assets_folder = "assets"
-high_score_file = "high_score.txt"
-
-# Build the list of includes for cx_Freeze
-includefiles = [
-    (audio_folder, audio_folder),  # Include the Audio folder
-    (assets_folder, assets_folder),  # Include the assets folder
-    high_score_file  # Include the high score file
+# Include additional files (assets, audio, etc.)
+include_files = [
+    ("assets", "assets"),
+    ("Audio", "Audio"),
+    "high_score.txt",
+    "ICON1.ico",
+    "LICENSE.txt",
 ]
 
-# Build the Executable
-base = None
-if sys.platform == "win32":
-    base = "Win32GUI"  # To prevent a terminal window from appearing
+# Define the executable target with icon specified
+base = "Win32GUI" if sys.platform == "win32" else None
+exe = Executable(
+    script="TetraFusion 1.9.0.py",
+    base=base,
+    target_name="TetraFusion 1.9.0.exe",
+    icon="ICON1.ico",  # Set the application icon
+)
 
-executables = [Executable(script, base=base, target_name="TetraFusion 1.3.exe")]
+# Define the shortcut table without specifying icon or index explicitly
+shortcut_table = [
+    ("DesktopShortcut",  # Shortcut
+     "DesktopFolder",  # Directory_
+     "TetraFusion 1.9.0",  # Name of the shortcut
+     "TARGETDIR",  # Component_
+     "[TARGETDIR]TetraFusion 1.9.0.exe",  # Target executable
+     None,  # Arguments
+     None,  # Description
+     None,  # Hotkey
+     None,  # Icon (remove explicit icon reference)
+     None,  # IconIndex
+     None,  # ShowCmd
+     "TARGETDIR",  # Working directory
+     )
+]
 
-# Setup function for cx_Freeze
+# Create the MSI data dictionary
+msi_data = {"Shortcut": shortcut_table}
+
+# Options for building the MSI
+bdist_msi_options = {
+    "data": msi_data,
+    "upgrade_code": "{E1234567-1234-5678-1234-56789ABCDEF0}",  # Replace with a unique GUID
+}
+
+# Setup configuration
 setup(
     name="TetraFusion",
-    version="1.3",
-    description="TetraFusion made by Wayne",
+    version="1.9.0",
+    description="A Tetris-inspired game with custom features",
     options={
         "build_exe": {
-            "packages": ["pygame", "random", "sys", "os"],
-            "include_files": includefiles,
-            "include_msvcr": True  # Ensures necessary runtime files are included
-        }
+            "include_files": include_files,
+            "includes": ["pygame"],  # Include necessary Python modules
+        },
+        "bdist_msi": bdist_msi_options,
     },
-    executables=executables
+    executables=[exe],
 )
