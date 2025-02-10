@@ -691,26 +691,18 @@ def play_custom_music(settings):
         pygame.mixer.music.stop()
         try:
             pygame.mixer.music.load(track)
-            # Play track once (no looping) so MUSIC_END_EVENT is triggered.
             pygame.mixer.music.play(0)
             pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
         except Exception as e:
             print(f"Error playing custom music: {e}")
     else:
-        print("No music files found in the selected directory.")
-
-def skip_current_track():
-    global custom_music_playlist, current_track_index
-    if custom_music_playlist:
-        current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+        # Fallback: if no custom music files are found, load default background music.
+        print("No music files found in the selected directory; loading default background music.")
         try:
-            pygame.mixer.music.load(custom_music_playlist[current_track_index])
-            pygame.mixer.music.play(0)
+            pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+            pygame.mixer.music.play(-1)
         except Exception as e:
-            print(f"Error skipping to next track: {e}")
-
-def stop_music():
-    pygame.mixer.music.stop()
+            print(f"Error loading default background music: {e}")
 
 # -------------------------- Menu System --------------------------
 def draw_main_menu():
@@ -2037,6 +2029,7 @@ def main():
                 pygame.mixer.music.play(-1)
             except Exception as e:
                 print(f"Error loading default background music: {e}")
+
     while True:
         main_menu()
         # Reset hold queue on game restart
