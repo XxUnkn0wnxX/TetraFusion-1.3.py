@@ -1031,7 +1031,11 @@ def play_custom_music(settings):
 
 
 def skip_current_track():
-    global custom_music_playlist, current_track_index, last_track_index
+    global custom_music_playlist, current_track_index, last_track_index, settings
+    # If music is disabled, do nothing.
+    if not settings.get('music_enabled', True):
+        return
+
     if custom_music_playlist:
         current_track_index = (current_track_index + 1) % len(custom_music_playlist)
         try:
@@ -1042,7 +1046,6 @@ def skip_current_track():
             last_track_index = current_track_index
         except Exception as e:
             print(f"Error skipping to next track: {e}")
-
 
 def stop_music():
     pygame.mixer.music.stop()
@@ -1350,7 +1353,11 @@ def play_custom_music(settings):
 
 
 def skip_current_track():
-    global custom_music_playlist, current_track_index, last_track_index
+    global custom_music_playlist, current_track_index, last_track_index, settings
+    # If music is disabled, do nothing.
+    if not settings.get('music_enabled', True):
+        return
+
     if custom_music_playlist:
         current_track_index = (current_track_index + 1) % len(custom_music_playlist)
         try:
@@ -1361,7 +1368,6 @@ def skip_current_track():
             last_track_index = current_track_index
         except Exception as e:
             print(f"Error skipping to next track: {e}")
-
 
 def stop_music():
     pygame.mixer.music.stop()
@@ -1668,7 +1674,11 @@ def play_custom_music(settings):
 
 
 def skip_current_track():
-    global custom_music_playlist, current_track_index, last_track_index
+    global custom_music_playlist, current_track_index, last_track_index, settings
+    # If music is disabled, do nothing.
+    if not settings.get('music_enabled', True):
+        return
+
     if custom_music_playlist:
         current_track_index = (current_track_index + 1) % len(custom_music_playlist)
         try:
@@ -1680,10 +1690,8 @@ def skip_current_track():
         except Exception as e:
             print(f"Error skipping to next track: {e}")
 
-
 def stop_music():
     pygame.mixer.music.stop()
-
 
 # -------------------------- Menu System --------------------------
 def draw_main_menu():
