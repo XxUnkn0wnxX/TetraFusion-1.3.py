@@ -34,34 +34,35 @@ def load_sound(file_path):
 
 def get_music_files(directory):
     """
-    Recursively search the given directory for files with supported music extensions.
+    Search the given directory (non-recursively) for files with supported music extensions.
     Returns a sorted list of file paths.
-    Ignores hidden files and directories.
+    Ignores hidden files.
     """
     supported_ext = ('.mp3', '.ogg', '.wav')
     music_files = []
     unsupported_files = []
 
-    for root, dirs, files in os.walk(directory):
-        # Filter out hidden directories
-        dirs[:] = [d for d in dirs if not d.startswith('.')]
-        for file in files:
-            # Ignore hidden files (e.g. files starting with a dot)
-            if file.startswith('.'):
-                continue
-            lower_file = file.lower()
-            if lower_file.endswith(supported_ext):
-                music_files.append(os.path.join(root, file))
+    # List only the items in the specified directory (no recursion)
+    for item in os.listdir(directory):
+        # Ignore hidden files and directories (those starting with a dot)
+        if item.startswith('.'):
+            continue
+        full_path = os.path.join(directory, item)
+        # Only process files (ignore directories)
+        if os.path.isfile(full_path):
+            lower_item = item.lower()
+            if lower_item.endswith(supported_ext):
+                music_files.append(full_path)
             else:
-                unsupported_files.append(file)
-    
+                unsupported_files.append(item)
+
     # Print unsupported files if any were detected
     if unsupported_files:
         print("Unsupported audio format(s) detected:")
         for file in unsupported_files:
             print("  " + file)
         print(f"Supported formats are: {supported_ext}")
-    
+
     return sorted(music_files)
 
 def update_custom_music_playlist(settings):
