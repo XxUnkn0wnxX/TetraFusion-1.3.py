@@ -1471,6 +1471,7 @@ def skip_current_track():
 def stop_music():
     pygame.mixer.music.stop()
 
+
 # -------------------------- Menu System --------------------------
 def draw_main_menu():
     screen.fill(BLACK)
@@ -1488,16 +1489,16 @@ def main_menu():
     while True:
         draw_main_menu()
         for event in pygame.event.get():
-            if event.type==pygame.QUIT:
+            if event.type == pygame.QUIT:
                 save_settings(settings)
                 pygame.quit()
                 sys.exit()
-            elif event.type==pygame.KEYDOWN:
-                if event.key==pygame.K_RETURN:
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
                     return
-                elif event.key==pygame.K_o:
+                elif event.key == pygame.K_o:
                     options_menu()
-                elif event.key==pygame.K_ESCAPE:
+                elif event.key == pygame.K_ESCAPE:
                     save_settings(settings)
                     pygame.quit()
                     sys.exit()
@@ -1528,60 +1529,60 @@ def options_menu():
         title_text = tetris_font_large.render("Options", True, WHITE)
         screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, 50))
         for i, (key, label) in enumerate(options):
-            color = RED if i==selected_option else WHITE
+            color = RED if i == selected_option else WHITE
             text = label
             if key in settings['controls']:
                 text = f"{label}: {pygame.key.name(settings['controls'][key]).upper()}"
-            elif key=='difficulty':
+            elif key == 'difficulty':
                 text = f"Difficulty: {settings['difficulty'].capitalize()}"
-            elif key=='flame_trails':
+            elif key == 'flame_trails':
                 text = f"Flame Trails: {'On' if settings['flame_trails'] else 'Off'}"
-            elif key=='grid_opacity':
+            elif key == 'grid_opacity':
                 text = f"Grid Opacity: {settings['grid_opacity']}"
-            elif key=='grid_lines':
+            elif key == 'grid_lines':
                 text = f"Grid Lines: {'On' if settings.get('grid_lines', True) else 'Off'}"
-            elif key=='ghost_piece':
+            elif key == 'ghost_piece':
                 text = f"Ghost Piece: {'On' if settings.get('ghost_piece', True) else 'Off'}"
-            elif key=='music_enabled':
+            elif key == 'music_enabled':
                 text = f"Music: {'On' if settings.get('music_enabled', True) else 'Off'}"
-            elif key=='use_custom_music':
+            elif key == 'use_custom_music':
                 text = f"Use Custom Music: {'On' if settings.get('use_custom_music', False) else 'Off'}"
-            elif key=='select_music_dir':
+            elif key == 'select_music_dir':
                 dir_display = settings.get('music_directory', '')
                 text = f"Select Music Directory: {dir_display if dir_display else 'Not Selected'}"
             option_text = tetris_font_medium.render(text, True, color)
-            screen.blit(option_text, (SCREEN_WIDTH//2 - option_text.get_width()//2, 150+i*50))
+            screen.blit(option_text, (SCREEN_WIDTH//2 - option_text.get_width()//2, 150 + i * 50))
         pygame.display.flip()
         for event in pygame.event.get():
-            if event.type==pygame.QUIT:
+            if event.type == pygame.QUIT:
                 save_settings(settings)
                 pygame.quit()
                 sys.exit()
-            elif event.type==pygame.KEYDOWN:
+            elif event.type == pygame.KEYDOWN:
                 if changing_key:
                     settings['controls'][changing_key] = event.key
                     changing_key = None
-                elif event.key==pygame.K_UP:
-                    selected_option = (selected_option-1)%len(options)
-                elif event.key==pygame.K_DOWN:
-                    selected_option = (selected_option+1)%len(options)
-                elif event.key==pygame.K_RETURN:
+                elif event.key == pygame.K_UP:
+                    selected_option = (selected_option - 1) % len(options)
+                elif event.key == pygame.K_DOWN:
+                    selected_option = (selected_option + 1) % len(options)
+                elif event.key == pygame.K_RETURN:
                     current_key = options[selected_option][0]
                     if current_key in settings['controls']:
                         changing_key = current_key
-                    elif current_key=='difficulty':
+                    elif current_key == 'difficulty':
                         difficulties = ['easy', 'normal', 'hard', 'very hard']
-                        new_idx = (difficulties.index(settings['difficulty'])+1)%len(difficulties)
+                        new_idx = (difficulties.index(settings['difficulty']) + 1) % len(difficulties)
                         settings['difficulty'] = difficulties[new_idx]
-                    elif current_key=='flame_trails':
+                    elif current_key == 'flame_trails':
                         settings['flame_trails'] = not settings['flame_trails']
-                    elif current_key=='grid_opacity':
-                        settings['grid_opacity'] = (settings['grid_opacity']+64)%256
-                    elif current_key=='grid_lines':
+                    elif current_key == 'grid_opacity':
+                        settings['grid_opacity'] = (settings['grid_opacity'] + 64) % 256
+                    elif current_key == 'grid_lines':
                         settings['grid_lines'] = not settings.get('grid_lines', True)
-                    elif current_key=='ghost_piece':
+                    elif current_key == 'ghost_piece':
                         settings['ghost_piece'] = not settings.get('ghost_piece', True)
-                    elif current_key=='music_enabled':
+                    elif current_key == 'music_enabled':
                         settings['music_enabled'] = not settings.get('music_enabled', True)
                         if not settings['music_enabled']:
                             stop_music()
@@ -1594,7 +1595,7 @@ def options_menu():
                                     pygame.mixer.music.play(-1)
                                 except Exception as e:
                                     print(f"Error loading default music: {e}")
-                    elif current_key=='use_custom_music':
+                    elif current_key == 'use_custom_music':
                         settings['use_custom_music'] = not settings.get('use_custom_music', False)
                         if settings['use_custom_music']:
                             play_custom_music(settings)
@@ -1604,111 +1605,28 @@ def options_menu():
                                 pygame.mixer.music.play(-1)
                             except Exception as e:
                                 print(f"Error loading default music: {e}")
-                    # macOS Helper   
                     elif current_key == 'select_music_dir':
                         selected_dir = select_music_directory()
                         if selected_dir:
                             settings['music_directory'] = selected_dir
                             if settings.get('use_custom_music', False):
                                 play_custom_music(settings)
-                    elif current_key=='back':
+                    elif current_key == 'back':
                         save_settings(settings)
                         return
-                elif event.key==pygame.K_ESCAPE:
+                elif event.key == pygame.K_ESCAPE:
                     save_settings(settings)
                     return
-
-def pause_game():
-    global settings
-    pause_text = tetris_font_large.render("PAUSED", True, WHITE)
-    paused = True
-    pygame.event.clear(pygame.KEYDOWN)
-    while paused:
-        screen.fill(BLACK)
-        screen.blit(pause_text, (SCREEN_WIDTH//2 - pause_text.get_width()//2, SCREEN_HEIGHT//2))
-        pygame.display.flip()
-        for event in pygame.event.get():
-            if event.type==pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type==pygame.KEYDOWN:
-                if event.key==settings['controls']['pause'] or event.key==pygame.K_ESCAPE:
-                    paused = False
-
-def display_game_over(score):
-    global high_score, high_score_name
-    if score > high_score:
-        initials = ""
-        input_active = True
-        while input_active:
-            screen.fill(BLACK)
-            game_over_text = tetris_font_large.render("NEW HIGH SCORE!", True, RED)
-            score_text = tetris_font_medium.render(f"Score: {score}", True, WHITE)
-            initials_text = tetris_font_medium.render(f"Enter Initials: {initials}", True, WHITE)
-            menu_text = tetris_font_small.render("Press M for Menu or ENTER to Save", True, WHITE)
-            screen.blit(game_over_text, (SCREEN_WIDTH//2 - game_over_text.get_width()//2, 50))
-            screen.blit(score_text, (SCREEN_WIDTH//2 - score_text.get_width()//2, 150))
-            screen.blit(initials_text, (SCREEN_WIDTH//2 - initials_text.get_width()//2, 250))
-            screen.blit(menu_text, (SCREEN_WIDTH//2 - menu_text.get_width()//2, 350))
-            pygame.display.flip()
-            for event in pygame.event.get():
-                if event.type==pygame.QUIT:
-                    save_settings(settings)
-                    pygame.quit()
-                    sys.exit()
-                elif event.type==pygame.KEYDOWN:
-                    if event.key==pygame.K_RETURN and initials:
-                        high_score = score
-                        high_score_name = initials
-                        save_high_score(high_score, high_score_name)
-                        input_active = False
-                    elif event.key==pygame.K_BACKSPACE:
-                        initials = initials[:-1]
-                    elif len(initials)<3 and event.unicode.isalnum():
-                        initials += event.unicode.upper()
-                    elif event.key==pygame.K_m:
-                        main_menu()
-                        return
-    else:
-        screen.fill(BLACK)
-        game_over_text = tetris_font_large.render("GAME OVER", True, RED)
-        score_text = tetris_font_medium.render(f"Score: {score}", True, WHITE)
-        restart_text = tetris_font_small.render("Press R to Restart", True, WHITE)
-        menu_text = tetris_font_small.render("Press M for Menu", True, WHITE)
-        screen.blit(game_over_text, (SCREEN_WIDTH//2 - game_over_text.get_width()//2, 50))
-        screen.blit(score_text, (SCREEN_WIDTH//2 - score_text.get_width()//2, 150))
-        screen.blit(restart_text, (SCREEN_WIDTH//2 - restart_text.get_width()//2, SCREEN_HEIGHT-130))
-        screen.blit(menu_text, (SCREEN_WIDTH//2 - menu_text.get_width()//2, SCREEN_HEIGHT-100))
-        pygame.display.flip()
-        while True:
-            for event in pygame.event.get():
-                if event.type==pygame.QUIT:
-                    save_settings(settings)
-                    pygame.quit()
-                    sys.exit()
-                elif event.type==pygame.KEYDOWN:
-                    if event.key==pygame.K_r:
-                        run_game()
-                        return
-                    elif event.key==pygame.K_m:
-                        main_menu()
-                        return
-
-def place_tetromino(tetromino, offset, grid, color_index):
-    for cy, row in enumerate(tetromino):
-        for cx, cell in enumerate(row):
-            if cell:
-                x = offset[0] + cx
-                y = offset[1] + cy
-                if 0 <= x < GRID_WIDTH and 0 <= y < GRID_HEIGHT:
-                    grid[y][x] = color_index
 
 # -------------------------- Game Loop --------------------------
 def run_game():
     global high_score, high_score_name, subwindow_visible, last_click_time, settings, heartbeat_playing, game_command
     global restart_button_rect, menu_button_rect, skip_button_rect, sound_bar_rect, current_track_index, custom_music_playlist
-    global hold_piece, hold_used  # Added hold globals
+    global hold_piece, hold_used  # Hold piece globals
+
+    # Reset hold queue on game start
+    hold_piece = None
+    hold_used = False
 
     game_command = None
     controls = settings['controls']
@@ -1739,7 +1657,6 @@ def run_game():
     tetromino_bag = TetrominoBag(SHAPES)
     tetromino = tetromino_bag.get_next_tetromino()
     next_tetromino = tetromino_bag.get_next_tetromino()
-    # Use get_shape_index() instead of SHAPES.index(tetromino)
     shape_index = get_shape_index(tetromino)
     if shape_index is None:
         shape_index = 0
@@ -1749,6 +1666,7 @@ def run_game():
     fast_fall = False
     last_fall_time = pygame.time.get_ticks()
     game_over = False
+    # (Note: We no longer use a "piece_locked" flag here; hard drop processing is integrated immediately.)
     left_pressed = False
     right_pressed = False
     last_horizontal_move = 0
@@ -1803,11 +1721,9 @@ def run_game():
 
         # --- Drawing Section ---
         screen.fill(BLACK)
-        # Draw the background grid with shake offsets.
         screen.blit(grid_surface, (shake_x, shake_y))
         
         if not in_level_transition:
-            # Draw placed blocks.
             for y in range(GRID_HEIGHT):
                 for x in range(GRID_WIDTH):
                     if grid[y][x]:
@@ -1820,12 +1736,8 @@ def run_game():
                                          (x * BLOCK_SIZE + shake_x,
                                           y * BLOCK_SIZE + shake_y,
                                           BLOCK_SIZE, BLOCK_SIZE), 1)
-
-            # Draw the ghost piece (which also draws its shadow inside its function).
             if settings.get('ghost_piece', True):
                 draw_ghost_piece(tetromino, offset, grid)
-
-            # Draw the active tetromino.
             for cy, row in enumerate(tetromino):
                 for cx, cell in enumerate(row):
                     if cell:
@@ -1833,8 +1745,6 @@ def run_game():
                                       (offset[0] + cx) * BLOCK_SIZE + shake_x,
                                       (offset[1] + cy) * BLOCK_SIZE + shake_y,
                                       BLOCK_SIZE)
-
-            # Draw particles.
             for explosion in explosion_particles:
                 explosion.draw(screen, (shake_x, shake_y))
             for particle in trail_particles:
@@ -1842,7 +1752,6 @@ def run_game():
             for particle in dust_particles:
                 particle.draw(screen)
         else:
-            # During level transition, draw the grid with a flashing effect and an overlay.
             for y in range(GRID_HEIGHT):
                 for x in range(GRID_WIDTH):
                     if grid[y][x]:
@@ -1859,11 +1768,8 @@ def run_game():
             level_shake_y = random.randint(-10, 10)
             screen.blit(level_text, (SCREEN_WIDTH // 2 - level_text.get_width() // 2 + level_shake_x,
                                      SCREEN_HEIGHT // 2 - level_text.get_height() // 2 + level_shake_y))
-
-        # Draw UI (Subwindow)
         draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_total,
                        is_tetris, tetris_last_flash, tetris_flash_time)
-
         pygame.display.flip()
 
         # --- Event Handling ---
@@ -1943,6 +1849,7 @@ def run_game():
                 elif event.key == controls['pause']:
                     pause_game()
                 elif event.key == controls['hard_drop']:
+                    # Process hard drop immediately:
                     hard_drop_rows = 0
                     temp_offset = offset.copy()
                     while valid_position(tetromino, [temp_offset[0], temp_offset[1] + 1], grid):
@@ -1955,6 +1862,50 @@ def run_game():
                             (offset[0] + random.uniform(-1, len(tetromino[0]) + 1)) * BLOCK_SIZE,
                             (offset[1] + len(tetromino)) * BLOCK_SIZE
                         ))
+                    # Immediately process placement and clear lines after hard drop:
+                    if check_game_over(grid):
+                        game_over = True
+                    else:
+                        original_grid = [row[:] for row in grid]
+                        place_tetromino(tetromino, offset, grid, color_index)
+                        hold_used = False  # Allow hold on next piece
+                        grid, lines_cleared = clear_lines(grid)
+                        lines_cleared_total += lines_cleared
+                        score = update_score(score, lines_cleared)
+                        pieces_dropped += 1
+                        if lines_cleared > 0:
+                            screen_shake = 8 + lines_cleared * 3
+                            full_lines = [y for y in range(GRID_HEIGHT) if all(original_grid[y])]
+                            for y in full_lines:
+                                for x in range(GRID_WIDTH):
+                                    if original_grid[y][x] != 0:
+                                        explosion_particles.append(Explosion(
+                                            x * BLOCK_SIZE + BLOCK_SIZE // 2,
+                                            y * BLOCK_SIZE + BLOCK_SIZE // 2,
+                                            COLORS[original_grid[y][x] - 1],
+                                            particle_count=45,
+                                            max_speed=15,
+                                            duration=75
+                                        ))
+                        if lines_cleared == 4:
+                            is_tetris = True
+                            tetris_last_flash = current_time
+                        new_level = lines_cleared_total // 10 + 1
+                        if new_level > level:
+                            level = new_level
+                            fall_speed = max(50, int(base_fall_speed * (0.85 ** (level - 1))))
+                            in_level_transition = True
+                            transition_start_time = current_time
+                            last_flash_time = current_time
+                            flash_count = 0
+                        tetromino = next_tetromino
+                        shape_index = get_shape_index(tetromino)
+                        if shape_index is None:
+                            shape_index = 0
+                        color_index = (shape_index + level - 1) % len(COLORS) + 1
+                        next_tetromino = tetromino_bag.get_next_tetromino()
+                        offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
+                # End hard_drop branch.
             elif event.type == pygame.KEYUP:
                 if event.key == controls['left']:
                     left_pressed = False
@@ -1985,8 +1936,7 @@ def run_game():
                 else:
                     original_grid = [row[:] for row in grid]
                     place_tetromino(tetromino, offset, grid, color_index)
-                    # Reset hold usage once the piece locks in place.
-                    hold_used = False
+                    hold_used = False  # Reset hold usage after locking piece
                     grid, lines_cleared = clear_lines(grid)
                     lines_cleared_total += lines_cleared
                     score = update_score(score, lines_cleared)
@@ -2045,14 +1995,17 @@ def run_game():
                 trail_particles.append(TrailParticle(spawn_x, spawn_y, direction))
         wind_force = ((-4.0 if left_pressed else 4.0 if right_pressed else 0),
                       (5.0 if fast_fall else 0))
+        # Update trail particles:
         for particle in trail_particles[:]:
             particle.update(wind_force, screen)
             if particle.age >= particle.max_age:
                 trail_particles.remove(particle)
+        # Update dust particles:
         for particle in dust_particles[:]:
             particle.update()
             if particle.age >= particle.max_age:
                 dust_particles.remove(particle)
+        # Update explosion particles:
         for explosion in explosion_particles[:]:
             explosion.update()
             if explosion.lifetime <= 0:
@@ -2073,7 +2026,7 @@ def run_game():
         
 # -------------------------- Main --------------------------
 def main():
-    global settings, game_command
+    global settings, game_command, hold_piece, hold_used
     settings = load_settings()
     if settings.get('music_enabled', True):
         if settings.get('use_custom_music', False):
@@ -2086,6 +2039,9 @@ def main():
                 print(f"Error loading default background music: {e}")
     while True:
         main_menu()
+        # Reset hold queue on game restart
+        hold_piece = None
+        hold_used = False
         while True:
             run_game()
             if game_command == "menu":
