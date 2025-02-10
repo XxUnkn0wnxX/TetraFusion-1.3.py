@@ -819,6 +819,10 @@ def pause_game():
     pause_text = tetris_font_large.render("PAUSED", True, WHITE)
     paused = True
     pygame.event.clear(pygame.KEYDOWN)
+    
+    # Pause the music as soon as the game is paused
+    pygame.mixer.music.pause()
+    
     while paused:
         screen.fill(BLACK)
         screen.blit(pause_text, (SCREEN_WIDTH//2 - pause_text.get_width()//2, SCREEN_HEIGHT//2))
@@ -831,6 +835,9 @@ def pause_game():
             elif event.type==pygame.KEYDOWN:
                 if event.key==settings['controls']['pause'] or event.key==pygame.K_ESCAPE:
                     paused = False
+                    
+    # Unpause the music when the game is resumed
+    pygame.mixer.music.unpause()
 
 def display_game_over(score):
     global high_score, high_score_name
@@ -1084,6 +1091,10 @@ def pause_game():
     pause_text = tetris_font_large.render("PAUSED", True, WHITE)
     paused = True
     pygame.event.clear(pygame.KEYDOWN)
+    
+    # Pause the music as soon as the game is paused
+    pygame.mixer.music.pause()
+    
     while paused:
         screen.fill(BLACK)
         screen.blit(pause_text, (SCREEN_WIDTH//2 - pause_text.get_width()//2, SCREEN_HEIGHT//2))
@@ -1096,6 +1107,9 @@ def pause_game():
             elif event.type==pygame.KEYDOWN:
                 if event.key==settings['controls']['pause'] or event.key==pygame.K_ESCAPE:
                     paused = False
+                    
+    # Unpause the music when the game is resumed
+    pygame.mixer.music.unpause()
 
 def display_game_over(score):
     global high_score, high_score_name
@@ -1350,6 +1364,10 @@ def pause_game():
     pause_text = tetris_font_large.render("PAUSED", True, WHITE)
     paused = True
     pygame.event.clear(pygame.KEYDOWN)
+    
+    # Pause the music as soon as the game is paused
+    pygame.mixer.music.pause()
+    
     while paused:
         screen.fill(BLACK)
         screen.blit(pause_text, (SCREEN_WIDTH//2 - pause_text.get_width()//2, SCREEN_HEIGHT//2))
@@ -1362,6 +1380,9 @@ def pause_game():
             elif event.type==pygame.KEYDOWN:
                 if event.key==settings['controls']['pause'] or event.key==pygame.K_ESCAPE:
                     paused = False
+                    
+    # Unpause the music when the game is resumed
+    pygame.mixer.music.unpause()
 
 def display_game_over(score):
     global high_score, high_score_name
