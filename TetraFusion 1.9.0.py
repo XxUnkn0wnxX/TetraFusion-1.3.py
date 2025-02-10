@@ -32,25 +32,65 @@ def load_sound(file_path):
         return None
 
 def get_music_files(directory):
-    """Recursively search the given directory for files with allowed music extensions.
-    Returns a sorted list (alphabetically)."""
-    allowed_ext = ('.mp3', '.wav', '.flac', '.ogg', '.aac', '.m4a')
+    """
+    Recursively search the given directory for files with supported music extensions.
+    Returns a sorted list of file paths.
+    Ignores hidden files and directories.
+    """
+    supported_ext = ('.mp3', '.ogg', '.wav')
     music_files = []
+    unsupported_files = []
+
     for root, dirs, files in os.walk(directory):
+        # Filter out hidden directories
+        dirs[:] = [d for d in dirs if not d.startswith('.')]
         for file in files:
-            if file.lower().endswith(allowed_ext):
+            # Ignore hidden files (e.g. files starting with a dot)
+            if file.startswith('.'):
+                continue
+            lower_file = file.lower()
+            if lower_file.endswith(supported_ext):
                 music_files.append(os.path.join(root, file))
+            else:
+                unsupported_files.append(file)
+    
+    # Print unsupported files if any were detected
+    if unsupported_files:
+        print("Unsupported audio format(s) detected:")
+        for file in unsupported_files:
+            print("  " + file)
+        print(f"Supported formats are: {supported_ext}")
+    
     return sorted(music_files)
 
 def update_custom_music_playlist(settings):
     global custom_music_playlist, current_track_index
-    music_dir = settings.get('music_directory', "")
-    if music_dir and os.path.isdir(music_dir):
-        custom_music_playlist = get_music_files(music_dir)
+    # If custom music is not enabled, use the default background track.
+    if not settings.get('use_custom_music', False):
+        custom_music_playlist = [BACKGROUND_MUSIC_PATH]
         current_track_index = 0
-    else:
-        custom_music_playlist = []
-        
+        return
+
+    # If custom music is enabled but the music directory is blank, use the default background track.
+    music_dir = settings.get('music_directory', "").strip()
+    if not music_dir:
+        custom_music_playlist = [BACKGROUND_MUSIC_PATH]
+        current_track_index = 0
+        return
+
+    # If a custom directory is provided, ensure it exists.
+    if not os.path.isdir(music_dir):
+        custom_music_playlist = [BACKGROUND_MUSIC_PATH]
+        current_track_index = 0
+        return
+
+    # Otherwise, get the supported music files from the custom directory.
+    playlist = get_music_files(music_dir)
+    if not playlist:
+        print("No supported audio files found in the specified directory; defaulting to default background music.")
+        playlist = [BACKGROUND_MUSIC_PATH]
+    custom_music_playlist = playlist
+    current_track_index = 0      
 
 # macOS Dialog Thing
 
@@ -718,6 +758,19 @@ def draw_main_menu():
     pygame.display.flip()
 
 def main_menu():
+    # Ensure music is started when entering the main menu.
+    if settings.get('music_enabled', True):
+        if settings.get('use_custom_music', False):
+            if not pygame.mixer.music.get_busy():
+                play_custom_music(settings)
+        else:
+            if not pygame.mixer.music.get_busy():
+                try:
+                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                    pygame.mixer.music.play(-1)  # Loop indefinitely
+                except Exception as e:
+                    print(f"Error loading default background music: {e}")
+
     while True:
         draw_main_menu()
         for event in pygame.event.get():
@@ -725,6 +778,16 @@ def main_menu():
                 save_settings(settings)
                 pygame.quit()
                 sys.exit()
+            elif event.type == MUSIC_END_EVENT:
+                # If using custom music, cycle to the next track.
+                if settings.get('use_custom_music', False) and custom_music_playlist:
+                    global current_track_index
+                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+                    try:
+                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
+                        pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when track ends
+                    except Exception as e:
+                        print(f"Error loading next track: {e}")
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN:
                     return
@@ -734,6 +797,7 @@ def main_menu():
                     save_settings(settings)
                     pygame.quit()
                     sys.exit()
+
 
 def options_menu():
     global settings
@@ -886,15 +950,24 @@ def display_game_over(score):
         pygame.display.flip()
         while True:
             for event in pygame.event.get():
-                if event.type==pygame.QUIT:
+                if event.type == pygame.QUIT:
                     save_settings(settings)
                     pygame.quit()
                     sys.exit()
-                elif event.type==pygame.KEYDOWN:
-                    if event.key==pygame.K_r:
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_r:
+                        # Restart background music before restarting the game
+                        if settings.get('music_enabled', True):
+                            play_custom_music(settings)
+                        else:
+                            try:
+                                pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                                pygame.mixer.music.play(-1)  # Loop indefinitely
+                            except Exception as e:
+                                print(f"Error loading default background music: {e}")
                         run_game()
                         return
-                    elif event.key==pygame.K_m:
+                    elif event.key == pygame.K_m:
                         main_menu()
                         return
 
@@ -953,22 +1026,46 @@ def draw_main_menu():
     pygame.display.flip()
 
 def main_menu():
+    # Ensure music is started when entering the main menu.
+    if settings.get('music_enabled', True):
+        if settings.get('use_custom_music', False):
+            if not pygame.mixer.music.get_busy():
+                play_custom_music(settings)
+        else:
+            if not pygame.mixer.music.get_busy():
+                try:
+                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                    pygame.mixer.music.play(-1)  # Loop indefinitely
+                except Exception as e:
+                    print(f"Error loading default background music: {e}")
+
     while True:
         draw_main_menu()
         for event in pygame.event.get():
-            if event.type==pygame.QUIT:
+            if event.type == pygame.QUIT:
                 save_settings(settings)
                 pygame.quit()
                 sys.exit()
-            elif event.type==pygame.KEYDOWN:
-                if event.key==pygame.K_RETURN:
+            elif event.type == MUSIC_END_EVENT:
+                # If using custom music, cycle to the next track.
+                if settings.get('use_custom_music', False) and custom_music_playlist:
+                    global current_track_index
+                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+                    try:
+                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
+                        pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when track ends
+                    except Exception as e:
+                        print(f"Error loading next track: {e}")
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
                     return
-                elif event.key==pygame.K_o:
+                elif event.key == pygame.K_o:
                     options_menu()
-                elif event.key==pygame.K_ESCAPE:
+                elif event.key == pygame.K_ESCAPE:
                     save_settings(settings)
                     pygame.quit()
                     sys.exit()
+
 
 def options_menu():
     global settings
@@ -1158,15 +1255,24 @@ def display_game_over(score):
         pygame.display.flip()
         while True:
             for event in pygame.event.get():
-                if event.type==pygame.QUIT:
+                if event.type == pygame.QUIT:
                     save_settings(settings)
                     pygame.quit()
                     sys.exit()
-                elif event.type==pygame.KEYDOWN:
-                    if event.key==pygame.K_r:
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_r:
+                        # Restart background music before restarting the game
+                        if settings.get('music_enabled', True):
+                            play_custom_music(settings)
+                        else:
+                            try:
+                                pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                                pygame.mixer.music.play(-1)  # Loop indefinitely
+                            except Exception as e:
+                                print(f"Error loading default background music: {e}")
                         run_game()
                         return
-                    elif event.key==pygame.K_m:
+                    elif event.key == pygame.K_m:
                         main_menu()
                         return
 
@@ -1226,22 +1332,46 @@ def draw_main_menu():
     pygame.display.flip()
 
 def main_menu():
+    # Ensure music is started when entering the main menu.
+    if settings.get('music_enabled', True):
+        if settings.get('use_custom_music', False):
+            if not pygame.mixer.music.get_busy():
+                play_custom_music(settings)
+        else:
+            if not pygame.mixer.music.get_busy():
+                try:
+                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                    pygame.mixer.music.play(-1)  # Loop indefinitely
+                except Exception as e:
+                    print(f"Error loading default background music: {e}")
+
     while True:
         draw_main_menu()
         for event in pygame.event.get():
-            if event.type==pygame.QUIT:
+            if event.type == pygame.QUIT:
                 save_settings(settings)
                 pygame.quit()
                 sys.exit()
-            elif event.type==pygame.KEYDOWN:
-                if event.key==pygame.K_RETURN:
+            elif event.type == MUSIC_END_EVENT:
+                # If using custom music, cycle to the next track.
+                if settings.get('use_custom_music', False) and custom_music_playlist:
+                    global current_track_index
+                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+                    try:
+                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
+                        pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when track ends
+                    except Exception as e:
+                        print(f"Error loading next track: {e}")
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
                     return
-                elif event.key==pygame.K_o:
+                elif event.key == pygame.K_o:
                     options_menu()
-                elif event.key==pygame.K_ESCAPE:
+                elif event.key == pygame.K_ESCAPE:
                     save_settings(settings)
                     pygame.quit()
                     sys.exit()
+
 
 def options_menu():
     global settings
@@ -1431,15 +1561,24 @@ def display_game_over(score):
         pygame.display.flip()
         while True:
             for event in pygame.event.get():
-                if event.type==pygame.QUIT:
+                if event.type == pygame.QUIT:
                     save_settings(settings)
                     pygame.quit()
                     sys.exit()
-                elif event.type==pygame.KEYDOWN:
-                    if event.key==pygame.K_r:
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_r:
+                        # Restart background music before restarting the game
+                        if settings.get('music_enabled', True):
+                            play_custom_music(settings)
+                        else:
+                            try:
+                                pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                                pygame.mixer.music.play(-1)  # Loop indefinitely
+                            except Exception as e:
+                                print(f"Error loading default background music: {e}")
                         run_game()
                         return
-                    elif event.key==pygame.K_m:
+                    elif event.key == pygame.K_m:
                         main_menu()
                         return
 
@@ -1499,6 +1638,19 @@ def draw_main_menu():
     pygame.display.flip()
 
 def main_menu():
+    # Ensure music is started when entering the main menu.
+    if settings.get('music_enabled', True):
+        if settings.get('use_custom_music', False):
+            if not pygame.mixer.music.get_busy():
+                play_custom_music(settings)
+        else:
+            if not pygame.mixer.music.get_busy():
+                try:
+                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                    pygame.mixer.music.play(-1)  # Loop indefinitely
+                except Exception as e:
+                    print(f"Error loading default background music: {e}")
+
     while True:
         draw_main_menu()
         for event in pygame.event.get():
@@ -1506,6 +1658,16 @@ def main_menu():
                 save_settings(settings)
                 pygame.quit()
                 sys.exit()
+            elif event.type == MUSIC_END_EVENT:
+                # If using custom music, cycle to the next track.
+                if settings.get('use_custom_music', False) and custom_music_playlist:
+                    global current_track_index
+                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+                    try:
+                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
+                        pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when track ends
+                    except Exception as e:
+                        print(f"Error loading next track: {e}")
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN:
                     return
@@ -1515,6 +1677,7 @@ def main_menu():
                     save_settings(settings)
                     pygame.quit()
                     sys.exit()
+
 
 def options_menu():
     global settings
@@ -1710,6 +1873,10 @@ def run_game():
                 heartbeat_playing = False
             if game_over_sound:
                 game_over_sound.play()
+                
+            # Stop the background music when the game is over
+            pygame.mixer.music.stop()
+            
             display_game_over(score)
             return
 
