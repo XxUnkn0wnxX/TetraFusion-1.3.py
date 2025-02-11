@@ -1617,6 +1617,8 @@ def run_game():
             level_shake_y = random.randint(-10, 10)
             screen.blit(level_text, (SCREEN_WIDTH // 2 - level_text.get_width() // 2 + level_shake_x,
                                      SCREEN_HEIGHT // 2 - level_text.get_height() // 2 + level_shake_y))
+        
+        # Draw subwindow elements (if any)
         draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_total,
                        is_tetris, tetris_last_flash, tetris_flash_time)
         pygame.display.flip()
