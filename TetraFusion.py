@@ -1567,8 +1567,8 @@ def run_game():
 
         # --- Drawing Section ---
         screen.fill(BLACK)
-        screen.blit(grid_surface, (shake_x, shake_y))
-        
+
+        # First, draw game board elements (tetromino pieces, ghost, explosions, etc.)        
         if not in_level_transition:
             for y in range(GRID_HEIGHT):
                 for x in range(GRID_WIDTH):
@@ -1577,9 +1577,6 @@ def run_game():
                                       x * BLOCK_SIZE + shake_x,
                                       y * BLOCK_SIZE + shake_y,
                                       BLOCK_SIZE)
-            if settings.get('ghost_piece', True):
-                ghost_color = COLORS[color_index - 1]
-                draw_ghost_piece(tetromino, offset, grid, ghost_color)
             for cy, row in enumerate(tetromino):
                 for cx, cell in enumerate(row):
                     if cell:
@@ -1587,12 +1584,22 @@ def run_game():
                                       (offset[0] + cx) * BLOCK_SIZE + shake_x,
                                       (offset[1] + cy) * BLOCK_SIZE + shake_y,
                                       BLOCK_SIZE)
+                                      
+            # Now, draw the grid lines on top of the tetromino pieces:
+            screen.blit(grid_surface, (shake_x, shake_y))
+            
+            # Finally, draw the ghost piece so it appears above the grid:
+            if settings.get('ghost_piece', True):
+                draw_ghost_piece(tetromino, offset, grid, COLORS[color_index - 1])
+        
+            # Draw explosions, trail particles, dust, etc.
             for explosion in explosion_particles:
                 explosion.draw(screen, (shake_x, shake_y))
             for particle in trail_particles:
                 particle.draw(screen)
             for particle in dust_particles:
                 particle.draw(screen)
+        # Level transition drawing...
         else:
             for y in range(GRID_HEIGHT):
                 for x in range(GRID_WIDTH):
