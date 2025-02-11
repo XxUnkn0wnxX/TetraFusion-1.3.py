@@ -943,6 +943,9 @@ def options_menu():
                         if selected_dir:
                             settings['music_directory'] = selected_dir
                             last_track_index = None
+                            # If custom music is enabled and overall music is enabled, start custom music immediately.
+                            if settings.get('use_custom_music', False) and settings.get('music_enabled', True):
+                                play_custom_music(settings)   
                     elif current_key == 'back':
                         save_settings(settings)
                         return
