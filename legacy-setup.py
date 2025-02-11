@@ -5,6 +5,7 @@ from cx_Freeze import setup, Executable
 include_files = [
     ("assets", "assets"),
     ("Audio", "Audio"),
+    "high_score.txt",
     "ICON1.ico",
     "LICENSE.txt",
 ]

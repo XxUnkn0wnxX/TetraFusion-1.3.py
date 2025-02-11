@@ -13,6 +13,10 @@ if os.path.exists(build_folder):
     except Exception as e:
         print(f"Warning: could not delete '{build_folder}' folder: {e}")
 
+# Ensure high_score.txt exists and is empty.
+with open("high_score.txt", "w") as f:
+    pass
+
 # Check if we are building a DMG (for macOS)
 is_dmg = any("bdist_dmg" in arg for arg in sys.argv)
 
