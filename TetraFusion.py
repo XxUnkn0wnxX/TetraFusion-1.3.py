@@ -812,6 +812,7 @@ def main_menu():
 def options_menu():
     global settings, last_track_index
     selected_option = 0
+    enter_pressed = False  # Flag to track whether Enter is held down
     options = [
         ('left', 'Move Left'),
         ('right', 'Move Right'),
@@ -839,15 +840,15 @@ def options_menu():
     # Total height = (number of options * spacing) + extra bottom padding
     total_options_height = (len(options) * option_spacing) + extra_bottom_padding
 
-    # Calculate base_y so that the list (including bottom padding) is vertically centered.
+    # Calculate base_y so that the list is vertically centered.
     base_y = (SCREEN_HEIGHT - total_options_height) // 2
 
     while True:
         screen.fill(BLACK)
         title_text = tetris_font_large.render("Options", True, WHITE)
-        screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, 50))
+        screen.blit(title_text, (SCREEN_WIDTH // 2 - title_text.get_width() // 2, 50))
         
-        # Render each option at the computed y coordinate.
+        # Render each option.
         for i, (key, label) in enumerate(options):
             color = RED if i == selected_option else WHITE
             text = label
@@ -872,26 +873,21 @@ def options_menu():
                 text = f"Select Music Directory: {dir_display if dir_display else 'Not Selected'}"
             
             option_text = tetris_font_medium.render(text, True, color)
-            y_coordinate = base_y + i * option_spacing  # This places each option with fixed spacing.
-            screen.blit(option_text, (SCREEN_WIDTH//2 - option_text.get_width()//2, y_coordinate))
+            y_coordinate = base_y + i * option_spacing
+            screen.blit(option_text, (SCREEN_WIDTH // 2 - option_text.get_width() // 2, y_coordinate))
         
         pygame.display.flip()
 
-        # Event handling (unchanged)
+        # Event handling
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 save_settings(settings)
                 pygame.quit()
                 sys.exit()
             elif event.type == pygame.KEYDOWN:
-                if changing_key:
-                    settings['controls'][changing_key] = event.key
-                    changing_key = None
-                elif event.key == pygame.K_UP:
-                    selected_option = (selected_option - 1) % len(options)
-                elif event.key == pygame.K_DOWN:
-                    selected_option = (selected_option + 1) % len(options)
-                elif event.key == pygame.K_RETURN:
+                # Only process Enter if it's not already pressed.
+                if event.key == pygame.K_RETURN and not enter_pressed:
+                    enter_pressed = True  # Mark Enter as pressed
                     current_key = options[selected_option][0]
                     if current_key in settings['controls']:
                         changing_key = current_key
@@ -935,20 +931,29 @@ def options_menu():
                         else:
                             stop_music()
                     elif current_key == 'select_music_dir':
+                        # Process the folder selection only once per Enter press.
                         selected_dir = select_music_directory()
                         if selected_dir:
                             settings['music_directory'] = selected_dir
                             last_track_index = None
-                            # If custom music is enabled and overall music is enabled, start custom music immediately.
                             if settings.get('use_custom_music', False) and settings.get('music_enabled', True):
-                                play_custom_music(settings)   
+                                play_custom_music(settings)
                     elif current_key == 'back':
                         save_settings(settings)
                         return
+                elif changing_key:
+                    settings['controls'][changing_key] = event.key
+                    changing_key = None
+                elif event.key == pygame.K_UP:
+                    selected_option = (selected_option - 1) % len(options)
+                elif event.key == pygame.K_DOWN:
+                    selected_option = (selected_option + 1) % len(options)
                 elif event.key == pygame.K_ESCAPE:
                     save_settings(settings)
                     return
-
+            elif event.type == pygame.KEYUP:
+                if event.key == pygame.K_RETURN:
+                    enter_pressed = False  # Reset the flag when Enter is released
 
 def pause_game():
     global settings
