@@ -13,9 +13,9 @@ include_files = [
 # Define the executable target with icon specified
 base = "Win32GUI" if sys.platform == "win32" else None
 exe = Executable(
-    script="TetraFusion.py",
+    script="TetraFusion 1.9.2.py",
     base=base,
-    target_name="TetraFusion 1.9.1.exe",
+    target_name="TetraFusion 1.9.2.exe",
     icon="ICON1.ico",  # Set the application icon
 )
 
@@ -23,9 +23,9 @@ exe = Executable(
 shortcut_table = [
     ("DesktopShortcut",  # Shortcut
      "DesktopFolder",  # Directory_
-     "TetraFusion 1.9.1",  # Name of the shortcut
+     "TetraFusion 1.9.2",  # Name of the shortcut
      "TARGETDIR",  # Component_
-     "[TARGETDIR]TetraFusion 1.9.1.exe",  # Target executable
+     "[TARGETDIR]TetraFusion 1.9.2.exe",  # Target executable
      None,  # Arguments
      None,  # Description
      None,  # Hotkey
@@ -48,12 +48,12 @@ bdist_msi_options = {
 # Setup configuration
 setup(
     name="TetraFusion",
-    version="1.9.1",
+    version="1.9.2",
     description="A Tetris-inspired game with custom features",
     options={
         "build_exe": {
             "include_files": include_files,
-            "includes": ["pygame"],  # Include necessary Python modules
+            "includes": ["pygame", "mutagen"],  # Include necessary Python modules
         },
         "bdist_msi": bdist_msi_options,
     },
