@@ -74,26 +74,22 @@ def update_custom_music_playlist(settings):
         current_track_index = 0
         return
 
-    # If custom music is enabled but the music directory is blank, use the default background track.
-    music_dir = settings.get('music_directory', "").strip()
-    if not music_dir:
+    # If the directory does not exist, notify the user, reset the setting, and use default.
+    if not os.path.isdir(settings['music_directory'].strip()):
+        print("Invalid music directory; defaulting to default background music.")
+        settings['music_directory'] = ""
+        save_settings(settings)
         custom_music_playlist = [BACKGROUND_MUSIC_PATH]
         current_track_index = 0
         return
 
-    # If a custom directory is provided, ensure it exists.
-    if not os.path.isdir(music_dir):
-        custom_music_playlist = [BACKGROUND_MUSIC_PATH]
-        current_track_index = 0
-        return
-
-    # Otherwise, get the supported music files from the custom directory.
-    playlist = get_music_files(music_dir)
+    # Otherwise, get the supported music files from the provided directory.
+    playlist = get_music_files(settings['music_directory'].strip())
     if not playlist:
         print("No supported audio files found in the specified directory; defaulting to default background music.")
         playlist = [BACKGROUND_MUSIC_PATH]
     custom_music_playlist = playlist
-    current_track_index = 0      
+    current_track_index = 0
 
 # macOS Dialog Thing
 
