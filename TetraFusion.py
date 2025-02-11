@@ -455,17 +455,17 @@ def draw_3d_block(screen, color, x, y, block_size):
     pygame.draw.polygon(screen, outline_color, left_polygon, 2)
     pygame.draw.polygon(screen, outline_color, right_polygon, 2)
 
-def draw_3d_grid(grid_surface, grid_color, grid_opacity):
+def draw_3d_grid(grid_surface, grid_color, grid_opacity, thickness=2):
     if not settings.get('grid_lines', True):
-        grid_surface.fill((0,0,0,0))
+        grid_surface.fill((0, 0, 0, 0))
         return
     grid_surface.fill((0, 0, 0, 0))
-    factor = grid_opacity / 192.0
-    line_color = tuple(int(grid_color[i]*factor) for i in range(3))
+    # Create a color with an alpha channel using grid_opacity
+    alpha_color = (grid_color[0], grid_color[1], grid_color[2], grid_opacity)
     for x in range(0, SCREEN_WIDTH, BLOCK_SIZE):
-        pygame.draw.line(grid_surface, line_color, (x,0), (x,SCREEN_HEIGHT), 1)
+        pygame.draw.line(grid_surface, alpha_color, (x, 0), (x, SCREEN_HEIGHT), thickness)
     for y in range(0, SCREEN_HEIGHT, BLOCK_SIZE):
-        pygame.draw.line(grid_surface, line_color, (0,y), (SCREEN_WIDTH,y), 1)
+        pygame.draw.line(grid_surface, alpha_color, (0, y), (SCREEN_WIDTH, y), thickness)
 
 def load_high_score(filename="high_score.txt"):
     try:
@@ -664,35 +664,40 @@ def draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_t
     screen.blit(subwindow, (SCREEN_WIDTH, 0))
 
 # -------------------------- Ghost Piece --------------------------
-def draw_ghost_piece(tetromino, offset, grid):
-    # Only draw the ghost piece if enabled in settings.
+def draw_ghost_piece(tetromino, offset, grid, color):
     if not settings.get('ghost_piece', True):
         return
 
-    # Determine the landing position by dropping the tetromino until it can no longer move down.
+    # Determine landing position by dropping the tetromino until it cannot move down.
     ghost_y = offset[1]
     while valid_position(tetromino, [offset[0], ghost_y + 1], grid):
         ghost_y += 1
     ghost_offset = [offset[0], ghost_y]
 
-    # Set opacity: 10% opaque
-    ghost_fill_alpha = int(255 * 0.1)      # (adjust as needed)
-    ghost_outline_alpha = int(255 * 0.1)     # (adjust as needed)
+    # Set opacity levels for the ghost piece (adjust as desired).
+    ghost_fill_alpha = int(255 * 0.2)       # 20% opacity for fill.
+    ghost_outline_alpha = int(255 * 0.4)      # More opaque border.
+    border_thickness = 2                    # Increase this value for a thicker border.
 
-    # Draw the entire ghost tetromino at its landing position.
+    # Draw the ghost tetromino at its landing position.
     for cy, row in enumerate(tetromino):
         for cx, cell in enumerate(row):
             if cell:
                 x = (ghost_offset[0] + cx) * BLOCK_SIZE
                 y = (ghost_offset[1] + cy) * BLOCK_SIZE
+                # Create a surface with per-pixel alpha.
                 ghost_block = pygame.Surface((BLOCK_SIZE, BLOCK_SIZE), pygame.SRCALPHA)
-                ghost_block.fill((200, 200, 200, ghost_fill_alpha))
-                pygame.draw.rect(ghost_block, (255, 255, 255, ghost_outline_alpha), (0, 0, BLOCK_SIZE, BLOCK_SIZE), 2)
+                # Fill the block with the tetromino color and specified opacity.
+                ghost_block.fill((color[0], color[1], color[2], ghost_fill_alpha))
+                # Draw a thick border around the block using the same color.
+                pygame.draw.rect(ghost_block,
+                                 (color[0], color[1], color[2], ghost_outline_alpha),
+                                 (0, 0, BLOCK_SIZE, BLOCK_SIZE),
+                                 border_thickness)
                 screen.blit(ghost_block, (x, y))
 
-    # Overlay the shadow on supported cells.
+    # Optional: If you have additional shadow logic.
     draw_shadow_reflection(tetromino, ghost_offset, grid)
-
 
 # -------------------------- Shadow Reflection --------------------------
 def draw_shadow_reflection(tetromino, ghost_offset, grid):
@@ -898,7 +903,12 @@ def options_menu():
                     elif current_key == 'flame_trails':
                         settings['flame_trails'] = not settings['flame_trails']
                     elif current_key == 'grid_opacity':
-                        settings['grid_opacity'] = (settings['grid_opacity'] + 64) % 256
+                        opacity_values = [0, 64, 128, 192, 255]
+                        try:
+                             idx = opacity_values.index(settings['grid_opacity'])
+                        except ValueError:
+                            idx = 0
+                        settings['grid_opacity'] = opacity_values[(idx + 1) % len(opacity_values)]
                     elif current_key == 'grid_lines':
                         settings['grid_lines'] = not settings.get('grid_lines', True)
                     elif current_key == 'ghost_piece':
@@ -1567,13 +1577,9 @@ def run_game():
                                       x * BLOCK_SIZE + shake_x,
                                       y * BLOCK_SIZE + shake_y,
                                       BLOCK_SIZE)
-                    if settings.get('grid_lines', True):
-                        pygame.draw.rect(screen, grid_color,
-                                         (x * BLOCK_SIZE + shake_x,
-                                          y * BLOCK_SIZE + shake_y,
-                                          BLOCK_SIZE, BLOCK_SIZE), 1)
             if settings.get('ghost_piece', True):
-                draw_ghost_piece(tetromino, offset, grid)
+                ghost_color = COLORS[color_index - 1]
+                draw_ghost_piece(tetromino, offset, grid, ghost_color)
             for cy, row in enumerate(tetromino):
                 for cx, cell in enumerate(row):
                     if cell:
