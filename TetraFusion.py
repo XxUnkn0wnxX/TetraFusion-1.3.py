@@ -464,10 +464,16 @@ def draw_3d_grid(grid_surface, grid_color, grid_opacity, thickness=2):
     grid_surface.fill((0, 0, 0, 0))
     # Create a color with an alpha channel using grid_opacity
     alpha_color = (grid_color[0], grid_color[1], grid_color[2], grid_opacity)
+    # Draw vertical grid lines (this loop stops before drawing the rightmost line)
     for x in range(0, SCREEN_WIDTH, BLOCK_SIZE):
         pygame.draw.line(grid_surface, alpha_color, (x, 0), (x, SCREEN_HEIGHT), thickness)
+    # Draw horizontal grid lines
     for y in range(0, SCREEN_HEIGHT, BLOCK_SIZE):
         pygame.draw.line(grid_surface, alpha_color, (0, y), (SCREEN_WIDTH, y), thickness)
+    # Draw the final right border line so that it separates the game area from the subwindow.
+    # We subtract 1 to ensure the line is drawn inside the grid_surface (which is SCREEN_WIDTH pixels wide)
+    pygame.draw.line(grid_surface, alpha_color, (SCREEN_WIDTH - 1, 0), (SCREEN_WIDTH - 1, SCREEN_HEIGHT), thickness)
+
 
 def load_high_score(filename="high_score.txt"):
     try:
