@@ -1,3 +1,4 @@
+# Game Ver 1.9.1
 import pygame
 import random
 import sys
@@ -12,6 +13,7 @@ import copy  # Needed for deepcopy
 pygame.init()
 pygame.mixer.set_num_channels(32)
 pygame.mixer.init()
+last_track_index = None  # Will store the current track index at game over.
 
 # -------------------------- Global Music Playlist Variables --------------------------
 MUSIC_END_EVENT = pygame.USEREVENT + 1
@@ -32,25 +34,66 @@ def load_sound(file_path):
         return None
 
 def get_music_files(directory):
-    """Recursively search the given directory for files with allowed music extensions.
-    Returns a sorted list (alphabetically)."""
-    allowed_ext = ('.mp3', '.wav', '.flac', '.ogg', '.aac', '.m4a')
+    """
+    Search the given directory (non-recursively) for files with supported music extensions.
+    Returns a sorted list of file paths.
+    Ignores hidden files.
+    """
+    supported_ext = ('.mp3', '.ogg', '.wav')
     music_files = []
-    for root, dirs, files in os.walk(directory):
-        for file in files:
-            if file.lower().endswith(allowed_ext):
-                music_files.append(os.path.join(root, file))
+    unsupported_files = []
+
+    # List only the items in the specified directory (no recursion)
+    for item in os.listdir(directory):
+        # Ignore hidden files and directories (those starting with a dot)
+        if item.startswith('.'):
+            continue
+        full_path = os.path.join(directory, item)
+        # Only process files (ignore directories)
+        if os.path.isfile(full_path):
+            lower_item = item.lower()
+            if lower_item.endswith(supported_ext):
+                music_files.append(full_path)
+            else:
+                unsupported_files.append(item)
+
+    # Print unsupported files if any were detected
+    if unsupported_files:
+        print("Unsupported audio format(s) detected:")
+        for file in unsupported_files:
+            print("  " + file)
+        print(f"Supported formats are: {supported_ext}")
+
     return sorted(music_files)
 
 def update_custom_music_playlist(settings):
     global custom_music_playlist, current_track_index
-    music_dir = settings.get('music_directory', "")
-    if music_dir and os.path.isdir(music_dir):
-        custom_music_playlist = get_music_files(music_dir)
+    # If custom music is not enabled, use the default background track.
+    if not settings.get('use_custom_music', False):
+        custom_music_playlist = [BACKGROUND_MUSIC_PATH]
         current_track_index = 0
-    else:
-        custom_music_playlist = []
-        
+        return
+
+    # If custom music is enabled but the music directory is blank, use the default background track.
+    music_dir = settings.get('music_directory', "").strip()
+    if not music_dir:
+        custom_music_playlist = [BACKGROUND_MUSIC_PATH]
+        current_track_index = 0
+        return
+
+    # If a custom directory is provided, ensure it exists.
+    if not os.path.isdir(music_dir):
+        custom_music_playlist = [BACKGROUND_MUSIC_PATH]
+        current_track_index = 0
+        return
+
+    # Otherwise, get the supported music files from the custom directory.
+    playlist = get_music_files(music_dir)
+    if not playlist:
+        print("No supported audio files found in the specified directory; defaulting to default background music.")
+        playlist = [BACKGROUND_MUSIC_PATH]
+    custom_music_playlist = playlist
+    current_track_index = 0      
 
 # macOS Dialog Thing
 
@@ -159,6 +202,7 @@ try:
     tetris_font_large = pygame.font.Font(TETRIS_FONT_PATH, 40)
     tetris_font_medium = pygame.font.Font(TETRIS_FONT_PATH, 27)
     tetris_font_small = pygame.font.Font(TETRIS_FONT_PATH, 18)
+    tetris_font_tiny = pygame.font.Font(TETRIS_FONT_PATH, 16)
 except FileNotFoundError:
     print(f"Font file not found: {TETRIS_FONT_PATH}")
     sys.exit()
@@ -596,7 +640,7 @@ def draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_t
             restart_button_rect.x + (restart_button_rect.width - restart_text.get_width()) // 2,
             restart_button_rect.y + (restart_button_rect.height - restart_text.get_height()) // 2))
         pygame.draw.rect(subwindow, (200, 200, 50), skip_button_rect)
-        skip_text = tetris_font_small.render("Skip Track", True, WHITE)
+        skip_text = tetris_font_tiny.render("Skip Track", True, WHITE)
         subwindow.blit(skip_text, (
             skip_button_rect.x + (skip_button_rect.width - skip_text.get_width()) // 2,
             skip_button_rect.y + (skip_button_rect.height - skip_text.get_height()) // 2))
@@ -680,18 +724,28 @@ def draw_shadow_reflection(tetromino, ghost_offset, grid):
                     screen.blit(shadow_block, (x, y))
 
 # -------------------------- Custom Music Functions --------------------------
+
 def play_custom_music(settings):
-    global custom_music_playlist, current_track_index
+    global custom_music_playlist, current_track_index, last_track_index
     if not settings.get('music_enabled', True):
         pygame.mixer.music.stop()
         return
+
     update_custom_music_playlist(settings)
+    
+    # If custom music is enabled and we have a previously saved track index,
+    # restore it. Otherwise, start at index 0.
+    if settings.get('use_custom_music', False) and last_track_index is not None and last_track_index < len(custom_music_playlist):
+        current_track_index = last_track_index
+    else:
+        current_track_index = 0
+
     if custom_music_playlist:
         track = custom_music_playlist[current_track_index]
         pygame.mixer.music.stop()
         try:
             pygame.mixer.music.load(track)
-            pygame.mixer.music.play(0)
+            pygame.mixer.music.play(0)  # Play once so that MUSIC_END_EVENT fires when the track ends.
             pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
         except Exception as e:
             print(f"Error playing custom music: {e}")
@@ -718,6 +772,19 @@ def draw_main_menu():
     pygame.display.flip()
 
 def main_menu():
+    # Ensure music is started when entering the main menu.
+    if settings.get('music_enabled', True):
+        if settings.get('use_custom_music', False):
+            if not pygame.mixer.music.get_busy():
+                play_custom_music(settings)
+        else:
+            if not pygame.mixer.music.get_busy():
+                try:
+                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                    pygame.mixer.music.play(-1)  # Loop indefinitely
+                except Exception as e:
+                    print(f"Error loading default background music: {e}")
+
     while True:
         draw_main_menu()
         for event in pygame.event.get():
@@ -725,6 +792,16 @@ def main_menu():
                 save_settings(settings)
                 pygame.quit()
                 sys.exit()
+            elif event.type == MUSIC_END_EVENT:
+                # If using custom music, cycle to the next track.
+                if settings.get('use_custom_music', False) and custom_music_playlist:
+                    global current_track_index
+                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+                    try:
+                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
+                        pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when track ends
+                    except Exception as e:
+                        print(f"Error loading next track: {e}")
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN:
                     return
@@ -735,244 +812,18 @@ def main_menu():
                     pygame.quit()
                     sys.exit()
 
+
 def options_menu():
-    global settings
+    global settings, last_track_index
     selected_option = 0
     options = [
         ('left', 'Move Left'),
         ('right', 'Move Right'),
         ('down', 'Soft Drop'),
         ('rotate', 'Rotate'),
-        ('hard_drop', 'Hard Drop'),  # ✅ Hard drop now appears
-        ('hold', 'Hold Piece'),      # ✅ Hold now appears
-        ('pause', 'Pause'),
-        ('difficulty', 'Difficulty'),
-        ('flame_trails', 'Flame Trails'),
-        ('grid_opacity', 'Grid Opacity'),
-        ('grid_lines', 'Grid Lines'),
-        ('ghost_piece', 'Ghost Piece'),
-        ('music_enabled', 'Music'),
-        ('use_custom_music', 'Use Custom Music'),
-        ('select_music_dir', 'Select Music Directory'),
-        ('back', 'Back to Main Menu')
-    ]
-    changing_key = None
-
-    while True:
-        screen.fill(BLACK)
-        title_text = tetris_font_large.render("Options", True, WHITE)
-        screen.blit(title_text, (SCREEN_WIDTH // 2 - title_text.get_width() // 2, 50))
-
-        for i, (key, label) in enumerate(options):
-            color = RED if i == selected_option else WHITE
-            text = label
-            if key in settings["controls"]:
-                text = f"{label}: {pygame.key.name(settings['controls'][key]).upper()}"
-            elif key == "difficulty":
-                text = f"Difficulty: {settings['difficulty'].capitalize()}"
-            elif key == "flame_trails":
-                text = f"Flame Trails: {'On' if settings['flame_trails'] else 'Off'}"
-            elif key == "grid_opacity":
-                text = f"Grid Opacity: {settings['grid_opacity']}"
-            elif key == "grid_lines":
-                text = f"Grid Lines: {'On' if settings.get('grid_lines', True) else 'Off'}"
-            elif key == "ghost_piece":
-                text = f"Ghost Piece: {'On' if settings.get('ghost_piece', True) else 'Off'}"
-            elif key == "music_enabled":
-                text = f"Music: {'On' if settings.get('music_enabled', True) else 'Off'}"
-            elif key == "use_custom_music":
-                text = f"Use Custom Music: {'On' if settings.get('use_custom_music', False) else 'Off'}"
-            elif key == "select_music_dir":
-                dir_display = settings.get("music_directory", "")
-                text = f"Select Music Directory: {dir_display if dir_display else 'Not Selected'}"
-
-            option_text = tetris_font_medium.render(text, True, color)
-            screen.blit(option_text, (SCREEN_WIDTH // 2 - option_text.get_width() // 2, 150 + i * 50))
-
-        pygame.display.flip()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type == pygame.KEYDOWN:
-                if changing_key:
-                    settings["controls"][changing_key] = event.key
-                    changing_key = None
-                elif event.key == pygame.K_UP:
-                    selected_option = (selected_option - 1) % len(options)
-                elif event.key == pygame.K_DOWN:
-                    selected_option = (selected_option + 1) % len(options)
-                elif event.key == pygame.K_RETURN:
-                    current_key = options[selected_option][0]
-                    if current_key in settings["controls"]:
-                        changing_key = current_key
-                    elif current_key == "back":
-                        save_settings(settings)
-                        return
-                elif event.key == pygame.K_ESCAPE:
-                    save_settings(settings)
-                    return
-
-def pause_game():
-    global settings
-    pause_text = tetris_font_large.render("PAUSED", True, WHITE)
-    paused = True
-    pygame.event.clear(pygame.KEYDOWN)
-    while paused:
-        screen.fill(BLACK)
-        screen.blit(pause_text, (SCREEN_WIDTH//2 - pause_text.get_width()//2, SCREEN_HEIGHT//2))
-        pygame.display.flip()
-        for event in pygame.event.get():
-            if event.type==pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type==pygame.KEYDOWN:
-                if event.key==settings['controls']['pause'] or event.key==pygame.K_ESCAPE:
-                    paused = False
-
-def display_game_over(score):
-    global high_score, high_score_name
-    if score > high_score:
-        initials = ""
-        input_active = True
-        while input_active:
-            screen.fill(BLACK)
-            game_over_text = tetris_font_large.render("NEW HIGH SCORE!", True, RED)
-            score_text = tetris_font_medium.render(f"Score: {score}", True, WHITE)
-            initials_text = tetris_font_medium.render(f"Enter Initials: {initials}", True, WHITE)
-            menu_text = tetris_font_small.render("Press M for Menu or ENTER to Save", True, WHITE)
-            screen.blit(game_over_text, (SCREEN_WIDTH//2 - game_over_text.get_width()//2, 50))
-            screen.blit(score_text, (SCREEN_WIDTH//2 - score_text.get_width()//2, 150))
-            screen.blit(initials_text, (SCREEN_WIDTH//2 - initials_text.get_width()//2, 250))
-            screen.blit(menu_text, (SCREEN_WIDTH//2 - menu_text.get_width()//2, 350))
-            pygame.display.flip()
-            for event in pygame.event.get():
-                if event.type==pygame.QUIT:
-                    save_settings(settings)
-                    pygame.quit()
-                    sys.exit()
-                elif event.type==pygame.KEYDOWN:
-                    if event.key==pygame.K_RETURN and initials:
-                        high_score = score
-                        high_score_name = initials
-                        save_high_score(high_score, high_score_name)
-                        input_active = False
-                    elif event.key==pygame.K_BACKSPACE:
-                        initials = initials[:-1]
-                    elif len(initials)<3 and event.unicode.isalnum():
-                        initials += event.unicode.upper()
-                    elif event.key==pygame.K_m:
-                        main_menu()
-                        return
-    else:
-        screen.fill(BLACK)
-        game_over_text = tetris_font_large.render("GAME OVER", True, RED)
-        score_text = tetris_font_medium.render(f"Score: {score}", True, WHITE)
-        restart_text = tetris_font_small.render("Press R to Restart", True, WHITE)
-        menu_text = tetris_font_small.render("Press M for Menu", True, WHITE)
-        screen.blit(game_over_text, (SCREEN_WIDTH//2 - game_over_text.get_width()//2, 50))
-        screen.blit(score_text, (SCREEN_WIDTH//2 - score_text.get_width()//2, 150))
-        screen.blit(restart_text, (SCREEN_WIDTH//2 - restart_text.get_width()//2, SCREEN_HEIGHT-130))
-        screen.blit(menu_text, (SCREEN_WIDTH//2 - menu_text.get_width()//2, SCREEN_HEIGHT-100))
-        pygame.display.flip()
-        while True:
-            for event in pygame.event.get():
-                if event.type==pygame.QUIT:
-                    save_settings(settings)
-                    pygame.quit()
-                    sys.exit()
-                elif event.type==pygame.KEYDOWN:
-                    if event.key==pygame.K_r:
-                        run_game()
-                        return
-                    elif event.key==pygame.K_m:
-                        main_menu()
-                        return
-
-def place_tetromino(tetromino, offset, grid, color_index):
-    for cy, row in enumerate(tetromino):
-        for cx, cell in enumerate(row):
-            if cell:
-                x = offset[0] + cx
-                y = offset[1] + cy
-                if 0 <= x < GRID_WIDTH and 0 <= y < GRID_HEIGHT:
-                    grid[y][x] = color_index
-
-# -------------------------- Custom Music Functions --------------------------
-def play_custom_music(settings):
-    global custom_music_playlist, current_track_index
-    if not settings.get('music_enabled', True):
-        pygame.mixer.music.stop()
-        return
-    update_custom_music_playlist(settings)
-    if custom_music_playlist:
-        track = custom_music_playlist[current_track_index]
-        pygame.mixer.music.stop()
-        try:
-            pygame.mixer.music.load(track)
-            pygame.mixer.music.play(0)  # play once so MUSIC_END_EVENT fires
-            pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
-        except Exception as e:
-            print(f"Error playing custom music: {e}")
-    else:
-        print("No music files found in the selected directory.")
-
-def skip_current_track():
-    global custom_music_playlist, current_track_index
-    if custom_music_playlist:
-        current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-        try:
-            pygame.mixer.music.load(custom_music_playlist[current_track_index])
-            pygame.mixer.music.play(0)
-        except Exception as e:
-            print(f"Error skipping track: {e}")
-
-def stop_music():
-    pygame.mixer.music.stop()
-
-# -------------------------- Menu System --------------------------
-def draw_main_menu():
-    screen.fill(BLACK)
-    title_text = tetris_font_large.render("TetraFusion", True, random.choice(COLORS))
-    start_text = tetris_font_medium.render("Press ENTER to Start", True, WHITE)
-    options_text = tetris_font_medium.render("Press O for Options", True, WHITE)
-    exit_text = tetris_font_medium.render("Press ESC to Quit", True, WHITE)
-    screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, SCREEN_HEIGHT//3))
-    screen.blit(start_text, (SCREEN_WIDTH//2 - start_text.get_width()//2, SCREEN_HEIGHT//2))
-    screen.blit(options_text, (SCREEN_WIDTH//2 - options_text.get_width()//2, SCREEN_HEIGHT//2+50))
-    screen.blit(exit_text, (SCREEN_WIDTH//2 - exit_text.get_width()//2, SCREEN_HEIGHT//2+100))
-    pygame.display.flip()
-
-def main_menu():
-    while True:
-        draw_main_menu()
-        for event in pygame.event.get():
-            if event.type==pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type==pygame.KEYDOWN:
-                if event.key==pygame.K_RETURN:
-                    return
-                elif event.key==pygame.K_o:
-                    options_menu()
-                elif event.key==pygame.K_ESCAPE:
-                    save_settings(settings)
-                    pygame.quit()
-                    sys.exit()
-
-def options_menu():
-    global settings
-    selected_option = 0
-    options = [
-        ('left', 'Left'),
-        ('right', 'Right'),
-        ('down', 'Down'),
-        ('rotate', 'Rotate'),
-        ('pause', 'Pause'),
         ('hard_drop', 'Hard Drop'),
+        ('hold', 'Hold Piece'),
+        ('pause', 'Pause'),
         ('difficulty', 'Difficulty'),
         ('flame_trails', 'Flame Trails'),
         ('grid_opacity', 'Grid Opacity'),
@@ -984,542 +835,23 @@ def options_menu():
         ('back', 'Back to Main Menu')
     ]
     changing_key = None
+
+    # Define vertical spacing for options and desired extra bottom padding.
+    option_spacing = 45
+    extra_bottom_padding = 0
+
+    # Total height = (number of options * spacing) + extra bottom padding
+    total_options_height = (len(options) * option_spacing) + extra_bottom_padding
+
+    # Calculate base_y so that the list (including bottom padding) is vertically centered.
+    base_y = (SCREEN_HEIGHT - total_options_height) // 2
+
     while True:
         screen.fill(BLACK)
         title_text = tetris_font_large.render("Options", True, WHITE)
         screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, 50))
-        for i, (key, label) in enumerate(options):
-            color = RED if i==selected_option else WHITE
-            text = label
-            if key in settings['controls']:
-                text = f"{label}: {pygame.key.name(settings['controls'][key]).upper()}"
-            elif key=='difficulty':
-                text = f"Difficulty: {settings['difficulty'].capitalize()}"
-            elif key=='flame_trails':
-                text = f"Flame Trails: {'On' if settings['flame_trails'] else 'Off'}"
-            elif key=='grid_opacity':
-                text = f"Grid Opacity: {settings['grid_opacity']}"
-            elif key=='grid_lines':
-                text = f"Grid Lines: {'On' if settings.get('grid_lines', True) else 'Off'}"
-            elif key=='ghost_piece':
-                text = f"Ghost Piece: {'On' if settings.get('ghost_piece', True) else 'Off'}"
-            elif key=='music_enabled':
-                text = f"Music: {'On' if settings.get('music_enabled', True) else 'Off'}"
-            elif key=='use_custom_music':
-                text = f"Use Custom Music: {'On' if settings.get('use_custom_music', False) else 'Off'}"
-            elif key=='select_music_dir':
-                dir_display = settings.get('music_directory', '')
-                text = f"Select Music Directory: {dir_display if dir_display else 'Not Selected'}"
-            option_text = tetris_font_medium.render(text, True, color)
-            screen.blit(option_text, (SCREEN_WIDTH//2 - option_text.get_width()//2, 150+i*50))
-        pygame.display.flip()
-        for event in pygame.event.get():
-            if event.type==pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type==pygame.KEYDOWN:
-                if changing_key:
-                    settings['controls'][changing_key] = event.key
-                    changing_key = None
-                elif event.key==pygame.K_UP:
-                    selected_option = (selected_option-1)%len(options)
-                elif event.key==pygame.K_DOWN:
-                    selected_option = (selected_option+1)%len(options)
-                elif event.key==pygame.K_RETURN:
-                    current_key = options[selected_option][0]
-                    if current_key in settings['controls']:
-                        changing_key = current_key
-                    elif current_key=='difficulty':
-                        difficulties = ['easy', 'normal', 'hard', 'very hard']
-                        new_idx = (difficulties.index(settings['difficulty'])+1)%len(difficulties)
-                        settings['difficulty'] = difficulties[new_idx]
-                    elif current_key=='flame_trails':
-                        settings['flame_trails'] = not settings['flame_trails']
-                    elif current_key=='grid_opacity':
-                        settings['grid_opacity'] = (settings['grid_opacity']+64)%256
-                    elif current_key=='grid_lines':
-                        settings['grid_lines'] = not settings.get('grid_lines', True)
-                    elif current_key=='ghost_piece':
-                        settings['ghost_piece'] = not settings.get('ghost_piece', True)
-                    elif current_key=='music_enabled':
-                        settings['music_enabled'] = not settings.get('music_enabled', True)
-                        if not settings['music_enabled']:
-                            stop_music()
-                        else:
-                            if settings.get('use_custom_music', False):
-                                play_custom_music(settings)
-                            else:
-                                try:
-                                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
-                                    pygame.mixer.music.play(-1)
-                                except Exception as e:
-                                    print(f"Error loading default music: {e}")
-                    elif current_key=='use_custom_music':
-                        settings['use_custom_music'] = not settings.get('use_custom_music', False)
-                        if settings['use_custom_music']:
-                            play_custom_music(settings)
-                        else:
-                            try:
-                                pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
-                                pygame.mixer.music.play(-1)
-                            except Exception as e:
-                                print(f"Error loading default music: {e}")
-                    # macOS Helper
-                    elif current_key == 'select_music_dir':
-                        selected_dir = select_music_directory()
-                        if selected_dir:
-                            settings['music_directory'] = selected_dir
-                            if settings.get('use_custom_music', False):
-                                play_custom_music(settings)
-                    elif current_key=='back':
-                        save_settings(settings)
-                        return
-                elif event.key==pygame.K_ESCAPE:
-                    save_settings(settings)
-                    return
-
-def pause_game():
-    global settings
-    pause_text = tetris_font_large.render("PAUSED", True, WHITE)
-    paused = True
-    pygame.event.clear(pygame.KEYDOWN)
-    while paused:
-        screen.fill(BLACK)
-        screen.blit(pause_text, (SCREEN_WIDTH//2 - pause_text.get_width()//2, SCREEN_HEIGHT//2))
-        pygame.display.flip()
-        for event in pygame.event.get():
-            if event.type==pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type==pygame.KEYDOWN:
-                if event.key==settings['controls']['pause'] or event.key==pygame.K_ESCAPE:
-                    paused = False
-
-def display_game_over(score):
-    global high_score, high_score_name
-    if score > high_score:
-        initials = ""
-        input_active = True
-        while input_active:
-            screen.fill(BLACK)
-            game_over_text = tetris_font_large.render("NEW HIGH SCORE!", True, RED)
-            score_text = tetris_font_medium.render(f"Score: {score}", True, WHITE)
-            initials_text = tetris_font_medium.render(f"Enter Initials: {initials}", True, WHITE)
-            menu_text = tetris_font_small.render("Press M for Menu or ENTER to Save", True, WHITE)
-            screen.blit(game_over_text, (SCREEN_WIDTH//2 - game_over_text.get_width()//2, 50))
-            screen.blit(score_text, (SCREEN_WIDTH//2 - score_text.get_width()//2, 150))
-            screen.blit(initials_text, (SCREEN_WIDTH//2 - initials_text.get_width()//2, 250))
-            screen.blit(menu_text, (SCREEN_WIDTH//2 - menu_text.get_width()//2, 350))
-            pygame.display.flip()
-            for event in pygame.event.get():
-                if event.type==pygame.QUIT:
-                    save_settings(settings)
-                    pygame.quit()
-                    sys.exit()
-                elif event.type==pygame.KEYDOWN:
-                    if event.key==pygame.K_RETURN and initials:
-                        high_score = score
-                        high_score_name = initials
-                        save_high_score(high_score, high_score_name)
-                        input_active = False
-                    elif event.key==pygame.K_BACKSPACE:
-                        initials = initials[:-1]
-                    elif len(initials)<3 and event.unicode.isalnum():
-                        initials += event.unicode.upper()
-                    elif event.key==pygame.K_m:
-                        main_menu()
-                        return
-    else:
-        screen.fill(BLACK)
-        game_over_text = tetris_font_large.render("GAME OVER", True, RED)
-        score_text = tetris_font_medium.render(f"Score: {score}", True, WHITE)
-        restart_text = tetris_font_small.render("Press R to Restart", True, WHITE)
-        menu_text = tetris_font_small.render("Press M for Menu", True, WHITE)
-        screen.blit(game_over_text, (SCREEN_WIDTH//2 - game_over_text.get_width()//2, 50))
-        screen.blit(score_text, (SCREEN_WIDTH//2 - score_text.get_width()//2, 150))
-        screen.blit(restart_text, (SCREEN_WIDTH//2 - restart_text.get_width()//2, SCREEN_HEIGHT-130))
-        screen.blit(menu_text, (SCREEN_WIDTH//2 - menu_text.get_width()//2, SCREEN_HEIGHT-100))
-        pygame.display.flip()
-        while True:
-            for event in pygame.event.get():
-                if event.type==pygame.QUIT:
-                    save_settings(settings)
-                    pygame.quit()
-                    sys.exit()
-                elif event.type==pygame.KEYDOWN:
-                    if event.key==pygame.K_r:
-                        run_game()
-                        return
-                    elif event.key==pygame.K_m:
-                        main_menu()
-                        return
-
-def place_tetromino(tetromino, offset, grid, color_index):
-    for cy, row in enumerate(tetromino):
-        for cx, cell in enumerate(row):
-            if cell:
-                x = offset[0] + cx
-                y = offset[1] + cy
-                if 0 <= x < GRID_WIDTH and 0 <= y < GRID_HEIGHT:
-                    grid[y][x] = color_index
-
-
-# -------------------------- Custom Music Functions --------------------------
-def play_custom_music(settings):
-    global custom_music_playlist, current_track_index
-    if not settings.get('music_enabled', True):
-        pygame.mixer.music.stop()
-        return
-    update_custom_music_playlist(settings)
-    if custom_music_playlist:
-        track = custom_music_playlist[current_track_index]
-        pygame.mixer.music.stop()
-        try:
-            pygame.mixer.music.load(track)
-            pygame.mixer.music.play(0)  # play once so MUSIC_END_EVENT fires
-            pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
-        except Exception as e:
-            print(f"Error playing custom music: {e}")
-    else:
-        print("No music files found in the selected directory.")
-
-def skip_current_track():
-    global custom_music_playlist, current_track_index
-    if custom_music_playlist:
-        current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-        try:
-            pygame.mixer.music.load(custom_music_playlist[current_track_index])
-            pygame.mixer.music.play(0)
-        except Exception as e:
-            print(f"Error skipping to next track: {e}")
-
-def stop_music():
-    pygame.mixer.music.stop()
-
-# -------------------------- Menu System --------------------------
-def draw_main_menu():
-    screen.fill(BLACK)
-    title_text = tetris_font_large.render("TetraFusion", True, random.choice(COLORS))
-    start_text = tetris_font_medium.render("Press ENTER to Start", True, WHITE)
-    options_text = tetris_font_medium.render("Press O for Options", True, WHITE)
-    exit_text = tetris_font_medium.render("Press ESC to Quit", True, WHITE)
-    screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, SCREEN_HEIGHT//3))
-    screen.blit(start_text, (SCREEN_WIDTH//2 - start_text.get_width()//2, SCREEN_HEIGHT//2))
-    screen.blit(options_text, (SCREEN_WIDTH//2 - options_text.get_width()//2, SCREEN_HEIGHT//2+50))
-    screen.blit(exit_text, (SCREEN_WIDTH//2 - exit_text.get_width()//2, SCREEN_HEIGHT//2+100))
-    pygame.display.flip()
-
-def main_menu():
-    while True:
-        draw_main_menu()
-        for event in pygame.event.get():
-            if event.type==pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type==pygame.KEYDOWN:
-                if event.key==pygame.K_RETURN:
-                    return
-                elif event.key==pygame.K_o:
-                    options_menu()
-                elif event.key==pygame.K_ESCAPE:
-                    save_settings(settings)
-                    pygame.quit()
-                    sys.exit()
-
-def options_menu():
-    global settings
-    selected_option = 0
-    options = [
-        ('left', 'Left'),
-        ('right', 'Right'),
-        ('down', 'Down'),
-        ('rotate', 'Rotate'),
-        ('pause', 'Pause'),
-        ('hard_drop', 'Hard Drop'),
-        ('difficulty', 'Difficulty'),
-        ('flame_trails', 'Flame Trails'),
-        ('grid_opacity', 'Grid Opacity'),
-        ('grid_lines', 'Grid Lines'),
-        ('ghost_piece', 'Ghost Piece'),
-        ('music_enabled', 'Music'),
-        ('use_custom_music', 'Use Custom Music'),
-        ('select_music_dir', 'Select Music Directory'),
-        ('back', 'Back to Main Menu')
-    ]
-    changing_key = None
-    while True:
-        screen.fill(BLACK)
-        title_text = tetris_font_large.render("Options", True, WHITE)
-        screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, 50))
-        for i, (key, label) in enumerate(options):
-            color = RED if i==selected_option else WHITE
-            text = label
-            if key in settings['controls']:
-                text = f"{label}: {pygame.key.name(settings['controls'][key]).upper()}"
-            elif key=='difficulty':
-                text = f"Difficulty: {settings['difficulty'].capitalize()}"
-            elif key=='flame_trails':
-                text = f"Flame Trails: {'On' if settings['flame_trails'] else 'Off'}"
-            elif key=='grid_opacity':
-                text = f"Grid Opacity: {settings['grid_opacity']}"
-            elif key=='grid_lines':
-                text = f"Grid Lines: {'On' if settings.get('grid_lines', True) else 'Off'}"
-            elif key=='ghost_piece':
-                text = f"Ghost Piece: {'On' if settings.get('ghost_piece', True) else 'Off'}"
-            elif key=='music_enabled':
-                text = f"Music: {'On' if settings.get('music_enabled', True) else 'Off'}"
-            elif key=='use_custom_music':
-                text = f"Use Custom Music: {'On' if settings.get('use_custom_music', False) else 'Off'}"
-            elif key=='select_music_dir':
-                dir_display = settings.get('music_directory', '')
-                text = f"Select Music Directory: {dir_display if dir_display else 'Not Selected'}"
-            option_text = tetris_font_medium.render(text, True, color)
-            screen.blit(option_text, (SCREEN_WIDTH//2 - option_text.get_width()//2, 150+i*50))
-        pygame.display.flip()
-        for event in pygame.event.get():
-            if event.type==pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type==pygame.KEYDOWN:
-                if changing_key:
-                    settings['controls'][changing_key] = event.key
-                    changing_key = None
-                elif event.key==pygame.K_UP:
-                    selected_option = (selected_option-1)%len(options)
-                elif event.key==pygame.K_DOWN:
-                    selected_option = (selected_option+1)%len(options)
-                elif event.key==pygame.K_RETURN:
-                    current_key = options[selected_option][0]
-                    if current_key in settings['controls']:
-                        changing_key = current_key
-                    elif current_key=='difficulty':
-                        difficulties = ['easy', 'normal', 'hard', 'very hard']
-                        new_idx = (difficulties.index(settings['difficulty'])+1)%len(difficulties)
-                        settings['difficulty'] = difficulties[new_idx]
-                    elif current_key=='flame_trails':
-                        settings['flame_trails'] = not settings['flame_trails']
-                    elif current_key=='grid_opacity':
-                        settings['grid_opacity'] = (settings['grid_opacity']+64)%256
-                    elif current_key=='grid_lines':
-                        settings['grid_lines'] = not settings.get('grid_lines', True)
-                    elif current_key=='ghost_piece':
-                        settings['ghost_piece'] = not settings.get('ghost_piece', True)
-                    elif current_key=='music_enabled':
-                        settings['music_enabled'] = not settings.get('music_enabled', True)
-                        if not settings['music_enabled']:
-                            stop_music()
-                        else:
-                            if settings.get('use_custom_music', False):
-                                play_custom_music(settings)
-                            else:
-                                try:
-                                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
-                                    pygame.mixer.music.play(-1)
-                                except Exception as e:
-                                    print(f"Error loading default music: {e}")
-                    elif current_key=='use_custom_music':
-                        settings['use_custom_music'] = not settings.get('use_custom_music', False)
-                        if settings['use_custom_music']:
-                            play_custom_music(settings)
-                        else:
-                            try:
-                                pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
-                                pygame.mixer.music.play(-1)
-                            except Exception as e:
-                                print(f"Error loading default music: {e}")
-                    # macOS Helper
-                    elif current_key == 'select_music_dir':
-                        selected_dir = select_music_directory()
-                        if selected_dir:
-                            settings['music_directory'] = selected_dir
-                            if settings.get('use_custom_music', False):
-                                play_custom_music(settings)
-                    elif current_key=='back':
-                        save_settings(settings)
-                        return
-                elif event.key==pygame.K_ESCAPE:
-                    save_settings(settings)
-                    return
-
-def pause_game():
-    global settings
-    pause_text = tetris_font_large.render("PAUSED", True, WHITE)
-    paused = True
-    pygame.event.clear(pygame.KEYDOWN)
-    while paused:
-        screen.fill(BLACK)
-        screen.blit(pause_text, (SCREEN_WIDTH//2 - pause_text.get_width()//2, SCREEN_HEIGHT//2))
-        pygame.display.flip()
-        for event in pygame.event.get():
-            if event.type==pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type==pygame.KEYDOWN:
-                if event.key==settings['controls']['pause'] or event.key==pygame.K_ESCAPE:
-                    paused = False
-
-def display_game_over(score):
-    global high_score, high_score_name
-    if score > high_score:
-        initials = ""
-        input_active = True
-        while input_active:
-            screen.fill(BLACK)
-            game_over_text = tetris_font_large.render("NEW HIGH SCORE!", True, RED)
-            score_text = tetris_font_medium.render(f"Score: {score}", True, WHITE)
-            initials_text = tetris_font_medium.render(f"Enter Initials: {initials}", True, WHITE)
-            menu_text = tetris_font_small.render("Press M for Menu or ENTER to Save", True, WHITE)
-            screen.blit(game_over_text, (SCREEN_WIDTH//2 - game_over_text.get_width()//2, 50))
-            screen.blit(score_text, (SCREEN_WIDTH//2 - score_text.get_width()//2, 150))
-            screen.blit(initials_text, (SCREEN_WIDTH//2 - initials_text.get_width()//2, 250))
-            screen.blit(menu_text, (SCREEN_WIDTH//2 - menu_text.get_width()//2, 350))
-            pygame.display.flip()
-            for event in pygame.event.get():
-                if event.type==pygame.QUIT:
-                    save_settings(settings)
-                    pygame.quit()
-                    sys.exit()
-                elif event.type==pygame.KEYDOWN:
-                    if event.key==pygame.K_RETURN and initials:
-                        high_score = score
-                        high_score_name = initials
-                        save_high_score(high_score, high_score_name)
-                        input_active = False
-                    elif event.key==pygame.K_BACKSPACE:
-                        initials = initials[:-1]
-                    elif len(initials)<3 and event.unicode.isalnum():
-                        initials += event.unicode.upper()
-                    elif event.key==pygame.K_m:
-                        main_menu()
-                        return
-    else:
-        screen.fill(BLACK)
-        game_over_text = tetris_font_large.render("GAME OVER", True, RED)
-        score_text = tetris_font_medium.render(f"Score: {score}", True, WHITE)
-        restart_text = tetris_font_small.render("Press R to Restart", True, WHITE)
-        menu_text = tetris_font_small.render("Press M for Menu", True, WHITE)
-        screen.blit(game_over_text, (SCREEN_WIDTH//2 - game_over_text.get_width()//2, 50))
-        screen.blit(score_text, (SCREEN_WIDTH//2 - score_text.get_width()//2, 150))
-        screen.blit(restart_text, (SCREEN_WIDTH//2 - restart_text.get_width()//2, SCREEN_HEIGHT-130))
-        screen.blit(menu_text, (SCREEN_WIDTH//2 - menu_text.get_width()//2, SCREEN_HEIGHT-100))
-        pygame.display.flip()
-        while True:
-            for event in pygame.event.get():
-                if event.type==pygame.QUIT:
-                    save_settings(settings)
-                    pygame.quit()
-                    sys.exit()
-                elif event.type==pygame.KEYDOWN:
-                    if event.key==pygame.K_r:
-                        run_game()
-                        return
-                    elif event.key==pygame.K_m:
-                        main_menu()
-                        return
-
-def place_tetromino(tetromino, offset, grid, color_index):
-    for cy, row in enumerate(tetromino):
-        for cx, cell in enumerate(row):
-            if cell:
-                x = offset[0] + cx
-                y = offset[1] + cy
-                if 0 <= x < GRID_WIDTH and 0 <= y < GRID_HEIGHT:
-                    grid[y][x] = color_index
-
-# -------------------------- Custom Music Functions --------------------------
-def play_custom_music(settings):
-    global custom_music_playlist, current_track_index
-    if not settings.get('music_enabled', True):
-        pygame.mixer.music.stop()
-        return
-    update_custom_music_playlist(settings)
-    if custom_music_playlist:
-        track = custom_music_playlist[current_track_index]
-        pygame.mixer.music.stop()
-        try:
-            pygame.mixer.music.load(track)
-            pygame.mixer.music.play(0)
-            pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
-        except Exception as e:
-            print(f"Error playing custom music: {e}")
-    else:
-        print("No music files found in the selected directory.")
-
-def skip_current_track():
-    global custom_music_playlist, current_track_index
-    if custom_music_playlist:
-        current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-        try:
-            pygame.mixer.music.load(custom_music_playlist[current_track_index])
-            pygame.mixer.music.play(0)
-        except Exception as e:
-            print(f"Error skipping track: {e}")
-
-def stop_music():
-    pygame.mixer.music.stop()
-
-
-# -------------------------- Menu System --------------------------
-def draw_main_menu():
-    screen.fill(BLACK)
-    title_text = tetris_font_large.render("TetraFusion", True, random.choice(COLORS))
-    start_text = tetris_font_medium.render("Press ENTER to Start", True, WHITE)
-    options_text = tetris_font_medium.render("Press O for Options", True, WHITE)
-    exit_text = tetris_font_medium.render("Press ESC to Quit", True, WHITE)
-    screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, SCREEN_HEIGHT//3))
-    screen.blit(start_text, (SCREEN_WIDTH//2 - start_text.get_width()//2, SCREEN_HEIGHT//2))
-    screen.blit(options_text, (SCREEN_WIDTH//2 - options_text.get_width()//2, SCREEN_HEIGHT//2+50))
-    screen.blit(exit_text, (SCREEN_WIDTH//2 - exit_text.get_width()//2, SCREEN_HEIGHT//2+100))
-    pygame.display.flip()
-
-def main_menu():
-    while True:
-        draw_main_menu()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:
-                    return
-                elif event.key == pygame.K_o:
-                    options_menu()
-                elif event.key == pygame.K_ESCAPE:
-                    save_settings(settings)
-                    pygame.quit()
-                    sys.exit()
-
-def options_menu():
-    global settings
-    selected_option = 0
-    options = [
-        ('left', 'Left'),
-        ('right', 'Right'),
-        ('down', 'Down'),
-        ('rotate', 'Rotate'),
-        ('pause', 'Pause'),
-        ('hard_drop', 'Hard Drop'),
-        ('difficulty', 'Difficulty'),
-        ('flame_trails', 'Flame Trails'),
-        ('grid_opacity', 'Grid Opacity'),
-        ('grid_lines', 'Grid Lines'),
-        ('ghost_piece', 'Ghost Piece'),
-        ('music_enabled', 'Music'),
-        ('use_custom_music', 'Use Custom Music'),
-        ('select_music_dir', 'Select Music Directory'),
-        ('back', 'Back to Main Menu')
-    ]
-    changing_key = None
-    while True:
-        screen.fill(BLACK)
-        title_text = tetris_font_large.render("Options", True, WHITE)
-        screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, 50))
+        
+        # Render each option at the computed y coordinate.
         for i, (key, label) in enumerate(options):
             color = RED if i == selected_option else WHITE
             text = label
@@ -1542,9 +874,14 @@ def options_menu():
             elif key == 'select_music_dir':
                 dir_display = settings.get('music_directory', '')
                 text = f"Select Music Directory: {dir_display if dir_display else 'Not Selected'}"
+            
             option_text = tetris_font_medium.render(text, True, color)
-            screen.blit(option_text, (SCREEN_WIDTH//2 - option_text.get_width()//2, 150 + i * 50))
+            y_coordinate = base_y + i * option_spacing  # This places each option with fixed spacing.
+            screen.blit(option_text, (SCREEN_WIDTH//2 - option_text.get_width()//2, y_coordinate))
+        
         pygame.display.flip()
+
+        # Event handling (unchanged)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 save_settings(settings)
@@ -1589,26 +926,643 @@ def options_menu():
                                     print(f"Error loading default music: {e}")
                     elif current_key == 'use_custom_music':
                         settings['use_custom_music'] = not settings.get('use_custom_music', False)
-                        if settings['use_custom_music']:
-                            play_custom_music(settings)
+                        last_track_index = None
+                        if settings.get('music_enabled', True):
+                            if settings.get('use_custom_music', False):
+                                play_custom_music(settings)
+                            else:
+                                try:
+                                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                                    pygame.mixer.music.play(-1)
+                                except Exception as e:
+                                    print(f"Error loading default background music: {e}")
                         else:
-                            try:
-                                pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
-                                pygame.mixer.music.play(-1)
-                            except Exception as e:
-                                print(f"Error loading default music: {e}")
+                            stop_music()
                     elif current_key == 'select_music_dir':
                         selected_dir = select_music_directory()
                         if selected_dir:
                             settings['music_directory'] = selected_dir
-                            if settings.get('use_custom_music', False):
-                                play_custom_music(settings)
+                            last_track_index = None
                     elif current_key == 'back':
                         save_settings(settings)
                         return
                 elif event.key == pygame.K_ESCAPE:
                     save_settings(settings)
                     return
+
+
+def pause_game():
+    global settings
+    pause_text = tetris_font_large.render("PAUSED", True, WHITE)
+    paused = True
+    pygame.event.clear(pygame.KEYDOWN)
+    
+    # Pause the music as soon as the game is paused
+    pygame.mixer.music.pause()
+    
+    while paused:
+        screen.fill(BLACK)
+        screen.blit(pause_text, (SCREEN_WIDTH//2 - pause_text.get_width()//2, SCREEN_HEIGHT//2))
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type==pygame.QUIT:
+                save_settings(settings)
+                pygame.quit()
+                sys.exit()
+            elif event.type==pygame.KEYDOWN:
+                if event.key==settings['controls']['pause'] or event.key==pygame.K_ESCAPE:
+                    paused = False
+                    
+    # Unpause the music when the game is resumed
+    pygame.mixer.music.unpause()
+
+def display_game_over(score):
+    global high_score, high_score_name
+    if score > high_score:
+        initials = ""
+        input_active = True
+        while input_active:
+            screen.fill(BLACK)
+            game_over_text = tetris_font_large.render("NEW HIGH SCORE!", True, RED)
+            score_text = tetris_font_medium.render(f"Score: {score}", True, WHITE)
+            initials_text = tetris_font_medium.render(f"Enter Initials: {initials}", True, WHITE)
+            menu_text = tetris_font_small.render("Press M for Menu or ENTER to Save", True, WHITE)
+            screen.blit(game_over_text, (SCREEN_WIDTH//2 - game_over_text.get_width()//2, 50))
+            screen.blit(score_text, (SCREEN_WIDTH//2 - score_text.get_width()//2, 150))
+            screen.blit(initials_text, (SCREEN_WIDTH//2 - initials_text.get_width()//2, 250))
+            screen.blit(menu_text, (SCREEN_WIDTH//2 - menu_text.get_width()//2, 350))
+            pygame.display.flip()
+            for event in pygame.event.get():
+                if event.type==pygame.QUIT:
+                    save_settings(settings)
+                    pygame.quit()
+                    sys.exit()
+                elif event.type==pygame.KEYDOWN:
+                    if event.key==pygame.K_RETURN and initials:
+                        high_score = score
+                        high_score_name = initials
+                        save_high_score(high_score, high_score_name)
+                        input_active = False
+                    elif event.key==pygame.K_BACKSPACE:
+                        initials = initials[:-1]
+                    elif len(initials)<3 and event.unicode.isalnum():
+                        initials += event.unicode.upper()
+                    elif event.key==pygame.K_m:
+                        main_menu()
+                        return
+    else:
+        screen.fill(BLACK)
+        game_over_text = tetris_font_large.render("GAME OVER", True, RED)
+        score_text = tetris_font_medium.render(f"Score: {score}", True, WHITE)
+        restart_text = tetris_font_small.render("Press R to Restart", True, WHITE)
+        menu_text = tetris_font_small.render("Press M for Menu", True, WHITE)
+        screen.blit(game_over_text, (SCREEN_WIDTH//2 - game_over_text.get_width()//2, 50))
+        screen.blit(score_text, (SCREEN_WIDTH//2 - score_text.get_width()//2, 150))
+        screen.blit(restart_text, (SCREEN_WIDTH//2 - restart_text.get_width()//2, SCREEN_HEIGHT-130))
+        screen.blit(menu_text, (SCREEN_WIDTH//2 - menu_text.get_width()//2, SCREEN_HEIGHT-100))
+        pygame.display.flip()
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    save_settings(settings)
+                    pygame.quit()
+                    sys.exit()
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_r:
+                        # Restart background music before restarting the game
+                        if settings.get('music_enabled', True):
+                            play_custom_music(settings)
+                        else:
+                            try:
+                                pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                                pygame.mixer.music.play(-1)  # Loop indefinitely
+                            except Exception as e:
+                                print(f"Error loading default background music: {e}")
+                        run_game()
+                        return
+                    elif event.key == pygame.K_m:
+                        main_menu()
+                        return
+
+def place_tetromino(tetromino, offset, grid, color_index):
+    for cy, row in enumerate(tetromino):
+        for cx, cell in enumerate(row):
+            if cell:
+                x = offset[0] + cx
+                y = offset[1] + cy
+                if 0 <= x < GRID_WIDTH and 0 <= y < GRID_HEIGHT:
+                    grid[y][x] = color_index
+
+# -------------------------- Custom Music Functions --------------------------
+def play_custom_music(settings):
+    global custom_music_playlist, current_track_index, last_track_index
+    if not settings.get('music_enabled', True):
+        pygame.mixer.music.stop()
+        return
+
+    update_custom_music_playlist(settings)
+    
+    # If using custom music and we have a previously saved track index, restore it.
+    if settings.get('use_custom_music', False) and last_track_index is not None and last_track_index < len(custom_music_playlist):
+        current_track_index = last_track_index
+    else:
+        current_track_index = 0
+
+    if custom_music_playlist:
+        track = custom_music_playlist[current_track_index]
+        pygame.mixer.music.stop()
+        try:
+            pygame.mixer.music.load(track)
+            pygame.mixer.music.play(0)  # play once so MUSIC_END_EVENT fires when track ends
+            pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
+        except Exception as e:
+            print(f"Error playing custom music: {e}")
+    else:
+        print("No music files found in the selected directory.")
+
+
+def skip_current_track():
+    global custom_music_playlist, current_track_index, last_track_index, settings
+    # If music is disabled, do nothing.
+    if not settings.get('music_enabled', True):
+        return
+
+    if custom_music_playlist:
+        current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+        try:
+            pygame.mixer.music.load(custom_music_playlist[current_track_index])
+            pygame.mixer.music.play(0)
+            # Save the new track index so that when game over occurs and later resumes,
+            # it will remember the last track that was played.
+            last_track_index = current_track_index
+        except Exception as e:
+            print(f"Error skipping to next track: {e}")
+
+def stop_music():
+    pygame.mixer.music.stop()
+
+# -------------------------- Menu System --------------------------
+def draw_main_menu():
+    screen.fill(BLACK)
+    title_text = tetris_font_large.render("TetraFusion", True, random.choice(COLORS))
+    start_text = tetris_font_medium.render("Press ENTER to Start", True, WHITE)
+    options_text = tetris_font_medium.render("Press O for Options", True, WHITE)
+    exit_text = tetris_font_medium.render("Press ESC to Quit", True, WHITE)
+    screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, SCREEN_HEIGHT//3))
+    screen.blit(start_text, (SCREEN_WIDTH//2 - start_text.get_width()//2, SCREEN_HEIGHT//2))
+    screen.blit(options_text, (SCREEN_WIDTH//2 - options_text.get_width()//2, SCREEN_HEIGHT//2+50))
+    screen.blit(exit_text, (SCREEN_WIDTH//2 - exit_text.get_width()//2, SCREEN_HEIGHT//2+100))
+    pygame.display.flip()
+
+def main_menu():
+    # Ensure music is started when entering the main menu.
+    if settings.get('music_enabled', True):
+        if settings.get('use_custom_music', False):
+            if not pygame.mixer.music.get_busy():
+                play_custom_music(settings)
+        else:
+            if not pygame.mixer.music.get_busy():
+                try:
+                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                    pygame.mixer.music.play(-1)  # Loop indefinitely
+                except Exception as e:
+                    print(f"Error loading default background music: {e}")
+
+    while True:
+        draw_main_menu()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                save_settings(settings)
+                pygame.quit()
+                sys.exit()
+            elif event.type == MUSIC_END_EVENT:
+                # If using custom music, cycle to the next track.
+                if settings.get('use_custom_music', False) and custom_music_playlist:
+                    global current_track_index
+                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+                    try:
+                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
+                        pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when track ends
+                    except Exception as e:
+                        print(f"Error loading next track: {e}")
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    return
+                elif event.key == pygame.K_o:
+                    options_menu()
+                elif event.key == pygame.K_ESCAPE:
+                    save_settings(settings)
+                    pygame.quit()
+                    sys.exit()
+
+def pause_game():
+    global settings
+    pause_text = tetris_font_large.render("PAUSED", True, WHITE)
+    paused = True
+    pygame.event.clear(pygame.KEYDOWN)
+    
+    # Pause the music as soon as the game is paused
+    pygame.mixer.music.pause()
+    
+    while paused:
+        screen.fill(BLACK)
+        screen.blit(pause_text, (SCREEN_WIDTH//2 - pause_text.get_width()//2, SCREEN_HEIGHT//2))
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type==pygame.QUIT:
+                save_settings(settings)
+                pygame.quit()
+                sys.exit()
+            elif event.type==pygame.KEYDOWN:
+                if event.key==settings['controls']['pause'] or event.key==pygame.K_ESCAPE:
+                    paused = False
+                    
+    # Unpause the music when the game is resumed
+    pygame.mixer.music.unpause()
+
+def display_game_over(score):
+    global high_score, high_score_name
+    if score > high_score:
+        initials = ""
+        input_active = True
+        while input_active:
+            screen.fill(BLACK)
+            game_over_text = tetris_font_large.render("NEW HIGH SCORE!", True, RED)
+            score_text = tetris_font_medium.render(f"Score: {score}", True, WHITE)
+            initials_text = tetris_font_medium.render(f"Enter Initials: {initials}", True, WHITE)
+            menu_text = tetris_font_small.render("Press M for Menu or ENTER to Save", True, WHITE)
+            screen.blit(game_over_text, (SCREEN_WIDTH//2 - game_over_text.get_width()//2, 50))
+            screen.blit(score_text, (SCREEN_WIDTH//2 - score_text.get_width()//2, 150))
+            screen.blit(initials_text, (SCREEN_WIDTH//2 - initials_text.get_width()//2, 250))
+            screen.blit(menu_text, (SCREEN_WIDTH//2 - menu_text.get_width()//2, 350))
+            pygame.display.flip()
+            for event in pygame.event.get():
+                if event.type==pygame.QUIT:
+                    save_settings(settings)
+                    pygame.quit()
+                    sys.exit()
+                elif event.type==pygame.KEYDOWN:
+                    if event.key==pygame.K_RETURN and initials:
+                        high_score = score
+                        high_score_name = initials
+                        save_high_score(high_score, high_score_name)
+                        input_active = False
+                    elif event.key==pygame.K_BACKSPACE:
+                        initials = initials[:-1]
+                    elif len(initials)<3 and event.unicode.isalnum():
+                        initials += event.unicode.upper()
+                    elif event.key==pygame.K_m:
+                        main_menu()
+                        return
+    else:
+        screen.fill(BLACK)
+        game_over_text = tetris_font_large.render("GAME OVER", True, RED)
+        score_text = tetris_font_medium.render(f"Score: {score}", True, WHITE)
+        restart_text = tetris_font_small.render("Press R to Restart", True, WHITE)
+        menu_text = tetris_font_small.render("Press M for Menu", True, WHITE)
+        screen.blit(game_over_text, (SCREEN_WIDTH//2 - game_over_text.get_width()//2, 50))
+        screen.blit(score_text, (SCREEN_WIDTH//2 - score_text.get_width()//2, 150))
+        screen.blit(restart_text, (SCREEN_WIDTH//2 - restart_text.get_width()//2, SCREEN_HEIGHT-130))
+        screen.blit(menu_text, (SCREEN_WIDTH//2 - menu_text.get_width()//2, SCREEN_HEIGHT-100))
+        pygame.display.flip()
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    save_settings(settings)
+                    pygame.quit()
+                    sys.exit()
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_r:
+                        # Restart background music before restarting the game
+                        if settings.get('music_enabled', True):
+                            play_custom_music(settings)
+                        else:
+                            try:
+                                pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                                pygame.mixer.music.play(-1)  # Loop indefinitely
+                            except Exception as e:
+                                print(f"Error loading default background music: {e}")
+                        run_game()
+                        return
+                    elif event.key == pygame.K_m:
+                        main_menu()
+                        return
+
+def place_tetromino(tetromino, offset, grid, color_index):
+    for cy, row in enumerate(tetromino):
+        for cx, cell in enumerate(row):
+            if cell:
+                x = offset[0] + cx
+                y = offset[1] + cy
+                if 0 <= x < GRID_WIDTH and 0 <= y < GRID_HEIGHT:
+                    grid[y][x] = color_index
+
+
+# -------------------------- Custom Music Functions --------------------------
+def play_custom_music(settings):
+    global custom_music_playlist, current_track_index, last_track_index
+    if not settings.get('music_enabled', True):
+        pygame.mixer.music.stop()
+        return
+
+    update_custom_music_playlist(settings)
+    
+    # If using custom music and we have a previously saved track index, restore it.
+    if settings.get('use_custom_music', False) and last_track_index is not None and last_track_index < len(custom_music_playlist):
+        current_track_index = last_track_index
+    else:
+        current_track_index = 0
+
+    if custom_music_playlist:
+        track = custom_music_playlist[current_track_index]
+        pygame.mixer.music.stop()
+        try:
+            pygame.mixer.music.load(track)
+            pygame.mixer.music.play(0)  # play once so MUSIC_END_EVENT fires when track ends
+            pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
+        except Exception as e:
+            print(f"Error playing custom music: {e}")
+    else:
+        print("No music files found in the selected directory.")
+
+
+def skip_current_track():
+    global custom_music_playlist, current_track_index, last_track_index, settings
+    # If music is disabled, do nothing.
+    if not settings.get('music_enabled', True):
+        return
+
+    if custom_music_playlist:
+        current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+        try:
+            pygame.mixer.music.load(custom_music_playlist[current_track_index])
+            pygame.mixer.music.play(0)
+            # Save the new track index so that when game over occurs and later resumes,
+            # it will remember the last track that was played.
+            last_track_index = current_track_index
+        except Exception as e:
+            print(f"Error skipping to next track: {e}")
+
+def stop_music():
+    pygame.mixer.music.stop()
+
+# -------------------------- Menu System --------------------------
+def draw_main_menu():
+    screen.fill(BLACK)
+    title_text = tetris_font_large.render("TetraFusion", True, random.choice(COLORS))
+    start_text = tetris_font_medium.render("Press ENTER to Start", True, WHITE)
+    options_text = tetris_font_medium.render("Press O for Options", True, WHITE)
+    exit_text = tetris_font_medium.render("Press ESC to Quit", True, WHITE)
+    screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, SCREEN_HEIGHT//3))
+    screen.blit(start_text, (SCREEN_WIDTH//2 - start_text.get_width()//2, SCREEN_HEIGHT//2))
+    screen.blit(options_text, (SCREEN_WIDTH//2 - options_text.get_width()//2, SCREEN_HEIGHT//2+50))
+    screen.blit(exit_text, (SCREEN_WIDTH//2 - exit_text.get_width()//2, SCREEN_HEIGHT//2+100))
+    pygame.display.flip()
+
+def main_menu():
+    # Ensure music is started when entering the main menu.
+    if settings.get('music_enabled', True):
+        if settings.get('use_custom_music', False):
+            if not pygame.mixer.music.get_busy():
+                play_custom_music(settings)
+        else:
+            if not pygame.mixer.music.get_busy():
+                try:
+                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                    pygame.mixer.music.play(-1)  # Loop indefinitely
+                except Exception as e:
+                    print(f"Error loading default background music: {e}")
+
+    while True:
+        draw_main_menu()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                save_settings(settings)
+                pygame.quit()
+                sys.exit()
+            elif event.type == MUSIC_END_EVENT:
+                # If using custom music, cycle to the next track.
+                if settings.get('use_custom_music', False) and custom_music_playlist:
+                    global current_track_index
+                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+                    try:
+                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
+                        pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when track ends
+                    except Exception as e:
+                        print(f"Error loading next track: {e}")
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    return
+                elif event.key == pygame.K_o:
+                    options_menu()
+                elif event.key == pygame.K_ESCAPE:
+                    save_settings(settings)
+                    pygame.quit()
+                    sys.exit()
+
+def pause_game():
+    global settings
+    pause_text = tetris_font_large.render("PAUSED", True, WHITE)
+    paused = True
+    pygame.event.clear(pygame.KEYDOWN)
+    
+    # Pause the music as soon as the game is paused
+    pygame.mixer.music.pause()
+    
+    while paused:
+        screen.fill(BLACK)
+        screen.blit(pause_text, (SCREEN_WIDTH//2 - pause_text.get_width()//2, SCREEN_HEIGHT//2))
+        pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type==pygame.QUIT:
+                save_settings(settings)
+                pygame.quit()
+                sys.exit()
+            elif event.type==pygame.KEYDOWN:
+                if event.key==settings['controls']['pause'] or event.key==pygame.K_ESCAPE:
+                    paused = False
+                    
+    # Unpause the music when the game is resumed
+    pygame.mixer.music.unpause()
+
+def display_game_over(score):
+    global high_score, high_score_name
+    if score > high_score:
+        initials = ""
+        input_active = True
+        while input_active:
+            screen.fill(BLACK)
+            game_over_text = tetris_font_large.render("NEW HIGH SCORE!", True, RED)
+            score_text = tetris_font_medium.render(f"Score: {score}", True, WHITE)
+            initials_text = tetris_font_medium.render(f"Enter Initials: {initials}", True, WHITE)
+            menu_text = tetris_font_small.render("Press M for Menu or ENTER to Save", True, WHITE)
+            screen.blit(game_over_text, (SCREEN_WIDTH//2 - game_over_text.get_width()//2, 50))
+            screen.blit(score_text, (SCREEN_WIDTH//2 - score_text.get_width()//2, 150))
+            screen.blit(initials_text, (SCREEN_WIDTH//2 - initials_text.get_width()//2, 250))
+            screen.blit(menu_text, (SCREEN_WIDTH//2 - menu_text.get_width()//2, 350))
+            pygame.display.flip()
+            for event in pygame.event.get():
+                if event.type==pygame.QUIT:
+                    save_settings(settings)
+                    pygame.quit()
+                    sys.exit()
+                elif event.type==pygame.KEYDOWN:
+                    if event.key==pygame.K_RETURN and initials:
+                        high_score = score
+                        high_score_name = initials
+                        save_high_score(high_score, high_score_name)
+                        input_active = False
+                    elif event.key==pygame.K_BACKSPACE:
+                        initials = initials[:-1]
+                    elif len(initials)<3 and event.unicode.isalnum():
+                        initials += event.unicode.upper()
+                    elif event.key==pygame.K_m:
+                        main_menu()
+                        return
+    else:
+        screen.fill(BLACK)
+        game_over_text = tetris_font_large.render("GAME OVER", True, RED)
+        score_text = tetris_font_medium.render(f"Score: {score}", True, WHITE)
+        restart_text = tetris_font_small.render("Press R to Restart", True, WHITE)
+        menu_text = tetris_font_small.render("Press M for Menu", True, WHITE)
+        screen.blit(game_over_text, (SCREEN_WIDTH//2 - game_over_text.get_width()//2, 50))
+        screen.blit(score_text, (SCREEN_WIDTH//2 - score_text.get_width()//2, 150))
+        screen.blit(restart_text, (SCREEN_WIDTH//2 - restart_text.get_width()//2, SCREEN_HEIGHT-130))
+        screen.blit(menu_text, (SCREEN_WIDTH//2 - menu_text.get_width()//2, SCREEN_HEIGHT-100))
+        pygame.display.flip()
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    save_settings(settings)
+                    pygame.quit()
+                    sys.exit()
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_r:
+                        # Restart background music before restarting the game
+                        if settings.get('music_enabled', True):
+                            play_custom_music(settings)
+                        else:
+                            try:
+                                pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                                pygame.mixer.music.play(-1)  # Loop indefinitely
+                            except Exception as e:
+                                print(f"Error loading default background music: {e}")
+                        run_game()
+                        return
+                    elif event.key == pygame.K_m:
+                        main_menu()
+                        return
+
+def place_tetromino(tetromino, offset, grid, color_index):
+    for cy, row in enumerate(tetromino):
+        for cx, cell in enumerate(row):
+            if cell:
+                x = offset[0] + cx
+                y = offset[1] + cy
+                if 0 <= x < GRID_WIDTH and 0 <= y < GRID_HEIGHT:
+                    grid[y][x] = color_index
+
+# -------------------------- Custom Music Functions --------------------------
+def play_custom_music(settings):
+    global custom_music_playlist, current_track_index, last_track_index
+    if not settings.get('music_enabled', True):
+        pygame.mixer.music.stop()
+        return
+
+    update_custom_music_playlist(settings)
+    
+    # If using custom music and we have a previously saved track index, restore it.
+    if settings.get('use_custom_music', False) and last_track_index is not None and last_track_index < len(custom_music_playlist):
+        current_track_index = last_track_index
+    else:
+        current_track_index = 0
+
+    if custom_music_playlist:
+        track = custom_music_playlist[current_track_index]
+        pygame.mixer.music.stop()
+        try:
+            pygame.mixer.music.load(track)
+            pygame.mixer.music.play(0)  # play once so MUSIC_END_EVENT fires when track ends
+            pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
+        except Exception as e:
+            print(f"Error playing custom music: {e}")
+    else:
+        print("No music files found in the selected directory.")
+
+
+def skip_current_track():
+    global custom_music_playlist, current_track_index, last_track_index, settings
+    # If music is disabled, do nothing.
+    if not settings.get('music_enabled', True):
+        return
+
+    if custom_music_playlist:
+        current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+        try:
+            pygame.mixer.music.load(custom_music_playlist[current_track_index])
+            pygame.mixer.music.play(0)
+            # Save the new track index so that when game over occurs and later resumes,
+            # it will remember the last track that was played.
+            last_track_index = current_track_index
+        except Exception as e:
+            print(f"Error skipping to next track: {e}")
+
+def stop_music():
+    pygame.mixer.music.stop()
+
+# -------------------------- Menu System --------------------------
+def draw_main_menu():
+    screen.fill(BLACK)
+    title_text = tetris_font_large.render("TetraFusion", True, random.choice(COLORS))
+    start_text = tetris_font_medium.render("Press ENTER to Start", True, WHITE)
+    options_text = tetris_font_medium.render("Press O for Options", True, WHITE)
+    exit_text = tetris_font_medium.render("Press ESC to Quit", True, WHITE)
+    screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, SCREEN_HEIGHT//3))
+    screen.blit(start_text, (SCREEN_WIDTH//2 - start_text.get_width()//2, SCREEN_HEIGHT//2))
+    screen.blit(options_text, (SCREEN_WIDTH//2 - options_text.get_width()//2, SCREEN_HEIGHT//2+50))
+    screen.blit(exit_text, (SCREEN_WIDTH//2 - exit_text.get_width()//2, SCREEN_HEIGHT//2+100))
+    pygame.display.flip()
+
+def main_menu():
+    # Ensure music is started when entering the main menu.
+    if settings.get('music_enabled', True):
+        if settings.get('use_custom_music', False):
+            if not pygame.mixer.music.get_busy():
+                play_custom_music(settings)
+        else:
+            if not pygame.mixer.music.get_busy():
+                try:
+                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                    pygame.mixer.music.play(-1)  # Loop indefinitely
+                except Exception as e:
+                    print(f"Error loading default background music: {e}")
+
+    while True:
+        draw_main_menu()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                save_settings(settings)
+                pygame.quit()
+                sys.exit()
+            elif event.type == MUSIC_END_EVENT:
+                # If using custom music, cycle to the next track.
+                if settings.get('use_custom_music', False) and custom_music_playlist:
+                    global current_track_index
+                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+                    try:
+                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
+                        pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when track ends
+                    except Exception as e:
+                        print(f"Error loading next track: {e}")
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN:
+                    return
+                elif event.key == pygame.K_o:
+                    options_menu()
+                elif event.key == pygame.K_ESCAPE:
+                    save_settings(settings)
+                    pygame.quit()
+                    sys.exit()
 
 # -------------------------- Game Loop --------------------------
 def run_game():
@@ -1689,6 +1643,12 @@ def run_game():
                 heartbeat_playing = False
             if game_over_sound:
                 game_over_sound.play()
+                
+            # Save the current track index if using custom music.
+            if settings.get('use_custom_music', False):
+                last_track_index = current_track_index
+            
+            pygame.mixer.music.stop()
             display_game_over(score)
             return
 
