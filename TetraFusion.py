@@ -202,6 +202,7 @@ try:
     tetris_font_large = pygame.font.Font(TETRIS_FONT_PATH, 40)
     tetris_font_medium = pygame.font.Font(TETRIS_FONT_PATH, 27)
     tetris_font_small = pygame.font.Font(TETRIS_FONT_PATH, 18)
+    tetris_font_tiny = pygame.font.Font(TETRIS_FONT_PATH, 16)
 except FileNotFoundError:
     print(f"Font file not found: {TETRIS_FONT_PATH}")
     sys.exit()
@@ -639,7 +640,7 @@ def draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_t
             restart_button_rect.x + (restart_button_rect.width - restart_text.get_width()) // 2,
             restart_button_rect.y + (restart_button_rect.height - restart_text.get_height()) // 2))
         pygame.draw.rect(subwindow, (200, 200, 50), skip_button_rect)
-        skip_text = tetris_font_small.render("Skip Track", True, WHITE)
+        skip_text = tetris_font_tiny.render("Skip Track", True, WHITE)
         subwindow.blit(skip_text, (
             skip_button_rect.x + (skip_button_rect.width - skip_text.get_width()) // 2,
             skip_button_rect.y + (skip_button_rect.height - skip_text.get_height()) // 2))
