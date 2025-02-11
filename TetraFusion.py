@@ -14,6 +14,7 @@ pygame.init()
 pygame.mixer.set_num_channels(32)
 pygame.mixer.init()
 last_track_index = None  # Will store the current track index at game over.
+GAME_CAPTION = "TetraFusion 1.9.2" # Define the caption thing
 
 # -------------------------- Global Music Playlist Variables --------------------------
 MUSIC_END_EVENT = pygame.USEREVENT + 1
@@ -204,7 +205,8 @@ except FileNotFoundError:
     sys.exit()
 
 screen = pygame.display.set_mode((SCREEN_WIDTH + SUBWINDOW_WIDTH, SCREEN_HEIGHT))
-pygame.display.set_caption("TetraFusion 1.9.0")
+# Later, when setting up the display:
+pygame.display.set_caption(GAME_CAPTION)
 clock = pygame.time.Clock()
 
 subwindow_visible = True
@@ -234,7 +236,7 @@ def load_settings(filename="settings.json"):
         "difficulty": "normal",
         "flame_trails": True,
         "grid_color": [200, 200, 200],
-        "grid_opacity": 128,
+        "grid_opacity": 255,
         "grid_lines": True,
         "ghost_piece": True,
         "music_enabled": True,
@@ -287,7 +289,7 @@ def save_settings(settings, filename="settings.json"):
             "difficulty": settings.get("difficulty", "normal"),
             "flame_trails": settings.get("flame_trails", True),
             "grid_color": settings.get("grid_color", [200, 200, 200]),
-            "grid_opacity": settings.get("grid_opacity", 128),
+            "grid_opacity": settings.get("grid_opacity", 255),
             "grid_lines": settings.get("grid_lines", True),
             "ghost_piece": settings.get("ghost_piece", True),
             "music_enabled": settings.get("music_enabled", True),
@@ -1473,7 +1475,7 @@ def run_game():
     difficulty = settings['difficulty']
     flame_trails_enabled = settings['flame_trails']
     grid_color = tuple(settings['grid_color'])
-    grid_opacity = settings.get('grid_opacity', 128)
+    grid_opacity = settings.get('grid_opacity', 255)
     grid_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
     draw_3d_grid(grid_surface, grid_color, grid_opacity)
 
