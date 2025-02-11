@@ -2,7 +2,23 @@ import sys
 import os
 import re
 import shutil
-from cx_Freeze import setup, Executable
+from cx_Freeze import setup, Executable, build_exe as _build_exe
+
+# Custom build_exe command that moves settings.py into the build folder.
+class CustomBuildExe(_build_exe):
+    def run(self):
+        # Run the standard build_exe process.
+        super().run()
+        # Determine the build directory used by cx_Freeze.
+        build_dir = self.build_exe
+        settings_path = "settings.py"
+        if os.path.exists(settings_path):
+            dest_path = os.path.join(build_dir, "settings.py")
+            try:
+                shutil.move(settings_path, dest_path)
+                print(f"Moved '{settings_path}' to '{dest_path}'")
+            except Exception as e:
+                print(f"Warning: Could not move '{settings_path}' into build folder: {e}")
 
 # Remove the existing build folder if it exists.
 build_folder = "build"
@@ -20,14 +36,14 @@ with open("high_score.txt", "w") as f:
 # Check if we are building a DMG (for macOS)
 is_dmg = any("bdist_dmg" in arg for arg in sys.argv)
 
-# Read the version from TetraFusion.py.
-version = "0.0.0"  # Default version if not found
+# Read only the first line from TetraFusion.py to extract version.
 with open("TetraFusion.py", "r") as f:
-    for line in f:
-        match = re.search(r'#\s*Game Ver:\s*([\d\.]+)', line)
-        if match:
-            version = match.group(1)
-            break
+    first_line = f.readline().strip()
+match = re.search(r'#\s*Game Ver:\s*([\d\.]+)', first_line)
+if match:
+    version = match.group(1)
+else:
+    version = "0.0.0"
 
 # Determine the executable extension based on platform and build command.
 if sys.platform == "win32":
@@ -98,4 +114,5 @@ setup(
         "bdist_msi": bdist_msi_options,
     },
     executables=[exe],
+    cmdclass={"build_exe": CustomBuildExe},
 )
