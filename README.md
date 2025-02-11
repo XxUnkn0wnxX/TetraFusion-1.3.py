@@ -1,17 +1,21 @@
-**TetraFusion** is a modern take on the classic Tetris game, implemented using Python and Pygame. This version introduces new difficulty settings, refined particle effects, and an improved in-game interface while keeping the timeless Tetris feel.
+**TetraFusion** is a modern take on the classic Tetris game, implemented using Python and Pygame. This version introduces new difficulty settings, enhanced particle effects, an improved in-game interface, and expanded custom music support while keeping the timeless Tetris feel.
 
 ---
 
 ## Features
 
 - **2.5D Block Rendering**: Blocks are rendered with a 3D-like perspective.
-- **Dynamic Particle Effects**: Enjoy visually engaging effects such as flame trails and explosions when blocks are placed.
+- **Dynamic Particle Effects**: Enjoy visually engaging effects such as flame trails, explosions, and dust particles when blocks are placed.
 - **Music and Sound Effects**: Enhance your gameplay with background music and sound effects.
-- **Custom Music Playlist**: Enable a custom music playlist by selecting a directory with supported audio files (.mp3, .wav, .flac, .ogg, .aac, or .m4a).
-- **Ghost Piece (Drop Shadow)**: See where the tetromino will land with a transparent ghost piece.
+- **Expanded Custom Music Playlist Support**:
+  - Select a directory with supported audio files (.mp3, .wav, .flac, .ogg, .aac, .m4a, or .wma).
+  - Uses Mutagen for audio verification.
+  - Includes track-skipping functionality.
+- **Ghost Piece (Drop Shadow)**: See where the tetromino will land with a transparent ghost piece and a shadow reflection effect.
 - **Hold Piece Mechanic**: Save a tetromino for later use to strategize your moves.
 - **High Score Tracking**: Save and load high scores along with player initials.
 - **Customizable Settings**: Adjust key bindings, grid opacity, difficulty (including a new "Very Hard" mode), and more via an in-game options menu.
+- **Joystick & Gamepad Support**: Navigate menus and play the game using a joystick or gamepad.
 - **Subwindow with Stats & Controls**: View real-time game statistics, volume control, and track skipping options.
 - **Tetris Flash Effect**: A special flash effect triggers when clearing four lines.
 
@@ -21,6 +25,11 @@
 
 - **Python 3.7+**
 - **Pygame 2.0+**
+- **Mutagen (for audio metadata support)**
+
+Install dependencies using:
+
+    pip install pygame mutagen
 
 ---
 
@@ -28,14 +37,12 @@
 
 1. **Clone the repository:**
 
-   git clone https://github.com/drDOOM69GAMING/TetraFusion-1.9.0.py.git  
-   cd TetraFusion-1.9.0.py
+   ```sh
+   git clone https://github.com/drDOOM69GAMING/TetraFusion.py.git  
+   cd TetraFusion.py
+   ```
 
-2. **Install dependencies:**
-
-   pip install pygame
-
-3. **Ensure the required assets are in place:**
+2. **Ensure the required assets are in place:**
 
    - **Fonts:**  
      Place `tetris-blocks.TTF` in the `assets` directory.
@@ -54,7 +61,7 @@
 
 Run the main script using:
 
-   python "TetraFusion 1.9.0.py"
+    python "TetraFusion.py"
 
 ---
 
@@ -68,6 +75,7 @@ Run the main script using:
 - **Enter**: Start the game from the main menu.
 - **Hold (default: C)**: Hold the current tetromino for later use.
 - **Mouse Click (Subwindow)**: Adjust volume, skip tracks, or interact with on-screen buttons.
+- **Gamepad Support**: Joystick navigation and button mapping for key actions.
 
 ### Screens Overview
 
@@ -94,10 +102,12 @@ Run the main script using:
 
 To change tetromino colors, edit the `COLORS` list in the script:
 
-    COLORS = [
-        (0, 255, 255), (255, 165, 0), (0, 0, 255),
-        (255, 0, 0), (0, 255, 0), (255, 255, 0), (128, 0, 128)
-    ]
+```python
+COLORS = [
+    (0, 255, 255), (255, 165, 0), (0, 0, 255),
+    (255, 0, 0), (0, 255, 0), (255, 255, 0), (128, 0, 128)
+]
+```
 
 ### Adjust Grid Settings
 
@@ -107,9 +117,11 @@ To change tetromino colors, edit the `COLORS` list in the script:
 - **Grid Size:**  
   Modify these constants to change the dimensions:
 
-    SCREEN_WIDTH = 450  
-    SCREEN_HEIGHT = 930  
-    BLOCK_SIZE = 30
+```python
+SCREEN_WIDTH = 450  
+SCREEN_HEIGHT = 930  
+BLOCK_SIZE = 30
+```
 
 ### Replace Audio
 
@@ -117,7 +129,7 @@ Swap out the audio files in the `Audio` directory with your own .ogg files to ch
 
 ### Enable Custom Music Playlist
 
-In the options menu, select a folder containing supported audio files to enable a custom music playlist.
+In the options menu, select a folder containing supported audio files to enable a custom music playlist. Now supports track-skipping and file verification using Mutagen.
 
 ---
 
@@ -133,8 +145,7 @@ If the file does not exist, it will be created automatically.
 
 ## Screenshots
 
-![sdkl;fdjskajfi34u390874](https://github.com/user-attachments/assets/99c74b04-8674-4654-a3cf-da3fc935705b)
-
+![Screenshot](https://github.com/user-attachments/assets/99c74b04-8674-4654-a3cf-da3fc935705b)
 
 ---
 
@@ -145,15 +156,21 @@ Contributions are welcome! Follow these steps:
 1. **Fork the repository.**
 2. **Create a new branch:**
 
-       git checkout -b feature-name
+   ```sh
+   git checkout -b feature-name
+   ```
 
 3. **Commit your changes:**
 
-       git commit -m "Add feature-name"
+   ```sh
+   git commit -m "Add feature-name"
+   ```
 
 4. **Push to your branch:**
 
-       git push origin feature-name
+   ```sh
+   git push origin feature-name
+   ```
 
 5. **Open a pull request.**
 
@@ -180,5 +197,3 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 
 - Inspired by the classic Tetris game.
 - Thanks to the Pygame community for their continuous support and resources.
-
----
