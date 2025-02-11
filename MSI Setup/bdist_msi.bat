@@ -1,4 +1,4 @@
 @echo off
-cd "%userprofile%\Desktop\TetraFusion Source Code"
+cd "%userprofile%\Desktop\Desktop\TetraFusion-TetraFusion"
 python setup.py bdist_msi
 pause
