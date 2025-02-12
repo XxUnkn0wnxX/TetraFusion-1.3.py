@@ -2184,6 +2184,8 @@ def run_game():
                 save_settings(settings)
                 pygame.quit()
                 sys.exit()
+            elif event.type == MUSIC_END_EVENT:
+                handle_music_end_event()
         process_keyboard_events(events, current_time)
         process_controller_events(events, current_time)
         process_mouse_events(events)
