@@ -1000,6 +1000,7 @@ def main_menu():
 
         clock.tick(30)
 
+# Main Options
 def options_menu():
     global settings, last_track_index
     selected_option = 0
@@ -1359,10 +1360,11 @@ def keyboard_keybinds_menu():
             if action == "back":
                 return
 
-# Options Controller Controls
+# Options Controller Controls         
 def controller_keybinds_menu():
     selected_option = 0
     changing_button = None
+    enter_pressed = False  # Flag to track whether Enter is held down
 
     # Ensure that a controller_controls dictionary exists in settings.
     if 'controller_controls' not in settings:
@@ -1377,7 +1379,7 @@ def controller_keybinds_menu():
             'skip_track': None
         }
 
-    # Define your controller options with non-bindable items first.
+    # Define your controller options.
     controller_options = [
         ('controller_menu_keybinds', 'Menu Nav Bindings'),
         ('left', 'Move Left'),
@@ -1390,81 +1392,149 @@ def controller_keybinds_menu():
         ('back', 'Back to Options')
     ]
     
-    # Define which keys are actually bindable.
+    # Define which options are bindable in controller_controls.
     bindable_keys = {"left", "right", "down", "rotate", "hard_drop", "hold", "pause", "skip_track"}
 
     option_spacing = 45
     base_y = 150  # starting vertical position for options
 
+    # --- Sub-Function: process_ctrl_nav_events ---
+    def process_ctrl_nav_events(options, selected_option, changing_button, enter_pressed):
+        """
+        Processes both keyboard and controller (including D-pad) navigation events
+        for the controller keybinds menu. Returns updated values for selected_option,
+        changing_button, enter_pressed, and an action flag.
+        
+        NOTE:
+          - In this menu, controller keys CAN bind to controller_controls.
+          - Keyboard events are allowed for navigation and for triggering binding mode via Enter;
+            however, once binding mode is active (i.e. changing_button is not None), only
+            controller key inputs (JOYBUTTONDOWN) will update the binding.
+          - The action flag will be:
+              • "back" if the user wants to exit the menu,
+              • "menu_nav" if the user selects the "controller_menu_keybinds" option.
+          - If the "controller_menu_navigation" settings are not defined, then controller button
+            navigation via JOYBUTTONDOWN will not work—but D-pad (JOYHATMOTION) and keyboard navigation
+            will still be available.
+        """
+        action = None  # Will hold the action if one is triggered.
+        for event in pygame.event.get():
+            # ---------------------- QUIT EVENT ----------------------
+            if event.type == pygame.QUIT:
+                save_settings(settings)
+                pygame.quit()
+                sys.exit()
+            # ---------------------- MUSIC END EVENT ----------------------
+            elif event.type == MUSIC_END_EVENT:
+                handle_music_end_event()
+            # ---------------------- CONTROLLER EVENTS (JOYBUTTONDOWN) ----------------------
+            elif event.type == pygame.JOYBUTTONDOWN:
+                if changing_button is not None:
+                    # In binding mode: capture the controller button and update the binding.
+                    settings['controller_controls'][changing_button] = event.button
+                    changing_button = None
+                else:
+                    # Not in binding mode: process navigation via controller buttons.
+                    nav = settings.get("controller_menu_navigation", {})
+                    up_btn = nav.get("up")
+                    down_btn = nav.get("down")
+                    select_btn = nav.get("select")
+                    back_btn = nav.get("back")
+                    if up_btn is not None and event.button == up_btn:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif down_btn is not None and event.button == down_btn:
+                        selected_option = (selected_option + 1) % len(options)
+                    elif back_btn is not None and event.button == back_btn:
+                        action = "back"
+                    elif select_btn is not None and event.button == select_btn:
+                        current_option = options[selected_option][0]
+                        if current_option == 'back':
+                            action = "back"
+                        elif current_option == 'controller_menu_keybinds':
+                            # New: trigger the menu navigation submenu.
+                            action = "menu_nav"
+                        else:
+                            # Trigger binding capture for this option if it is bindable.
+                            if current_option in settings['controller_controls']:
+                                changing_button = current_option
+            # ---------------------- D-PAD (JOYHATMOTION) NAVIGATION ----------------------
+            elif event.type == pygame.JOYHATMOTION:
+                if changing_button is None:
+                    hx, hy = event.value
+                    if hy == 1:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif hy == -1:
+                        selected_option = (selected_option + 1) % len(options)
+            # ---------------------- KEYBOARD EVENTS (NAVIGATION) ----------------------
+            elif event.type == pygame.KEYDOWN:
+                # Keyboard navigation is allowed, but keyboard keys will not be used to bind.
+                if event.key == pygame.K_ESCAPE:
+                    if changing_button is not None:
+                        changing_button = None
+                    else:
+                        action = "back"
+                elif changing_button is None:
+                    if event.key == pygame.K_UP:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif event.key == pygame.K_DOWN:
+                        selected_option = (selected_option + 1) % len(options)
+                    # Use Enter to trigger binding capture (keyboard can trigger, but only controller keys will update).
+                    elif event.key == pygame.K_RETURN and not enter_pressed:
+                        enter_pressed = True
+                        current_option = options[selected_option][0]
+                        if current_option == 'back':
+                            action = "back"
+                        elif current_option == 'controller_menu_keybinds':
+                            # Trigger menu navigation submenu from keyboard as well.
+                            action = "menu_nav"
+                        else:
+                            if current_option in settings['controller_controls']:
+                                changing_button = current_option
+            elif event.type == pygame.KEYUP:
+                if event.key == pygame.K_RETURN:
+                    enter_pressed = False
+        return selected_option, changing_button, enter_pressed, action
+
+    # ---------------------- MAIN LOOP FOR CONTROLLER KEYBINDS MENU ----------------------
     while True:
         screen.fill(BLACK)
         title_text = tetris_font_large.render("Controller Keybinds", True, WHITE)
-        scaled_title = pygame.transform.scale(title_text, (int(title_text.get_width() * 0.8), int(title_text.get_height() * 0.8)))
+        scaled_title = pygame.transform.scale(title_text, (int(title_text.get_width() * 0.8),
+                                                             int(title_text.get_height() * 0.8)))
         screen.blit(scaled_title, (SCREEN_WIDTH // 2 - scaled_title.get_width() // 2, 50))
         
-        # Render each option.
+        # Render each controller option.
         for i, (key, label) in enumerate(controller_options):
             color = RED if i == selected_option else WHITE
             if key in bindable_keys:
                 current_binding = settings['controller_controls'].get(key)
-                # If there's a binding, show it. Otherwise, just show the label.
                 if current_binding is not None:
                     display_text = f"{label}: Button {current_binding}"
                 else:
                     display_text = label
             else:
-                display_text = label  # Non-bindable options: just display the label.
+                display_text = label  # Non-bindable options.
             option_text = tetris_font_medium.render(display_text, True, color)
             y_coordinate = base_y + i * option_spacing
             screen.blit(option_text, (SCREEN_WIDTH // 2 - option_text.get_width() // 2, y_coordinate))
         
         pygame.display.flip()
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type == MUSIC_END_EVENT:
-                handle_music_end_event()
-            elif event.type == pygame.KEYDOWN:
-                # ESC cancels a pending binding or exits the menu.
-                if event.key == pygame.K_ESCAPE:
-                    if changing_button is not None:
-                        changing_button = None  # Cancel pending binding.
-                    else:
-                        return
-                # If a binding is pending, ignore other keyboard input.
-                elif changing_button is not None:
-                    pass
-                else:
-                    if event.key == pygame.K_UP:
-                        selected_option = (selected_option - 1) % len(controller_options)
-                    elif event.key == pygame.K_DOWN:
-                        selected_option = (selected_option + 1) % len(controller_options)
-                    elif event.key == pygame.K_RETURN:
-                        current_option = controller_options[selected_option][0]
-                        if current_option == 'back':
-                            return
-                        elif current_option == 'controller_menu_keybinds':
-                            controller_menu_nav_menu()
-                            enter_pressed = False
-                            pygame.event.clear()
-                        else:
-                            # Trigger capture mode for the selected controller input.
-                            changing_button = current_option
-            elif event.type == pygame.JOYBUTTONDOWN:
-                # Only capture controller input when in binding capture mode.
-                if changing_button is not None:
-                    settings['controller_controls'][changing_button] = event.button
-                    changing_button = None
-            elif event.type == pygame.KEYUP:
-                pass
+        selected_option, changing_button, enter_pressed, action = process_ctrl_nav_events(
+            controller_options, selected_option, changing_button, enter_pressed
+        )
+        if action is not None:
+            if action == "back":
+                return
+            elif action == "menu_nav":
+                # Call the controller menu navigation bindings submenu.
+                controller_menu_nav_menu()
 
 # Options Controller Menu Keybinds
 def controller_menu_nav_menu():
     selected_option = 0
     changing_button = None
+    enter_pressed = False  # Flag to track whether Enter is held down
 
     # Ensure the "controller_menu_navigation" settings exist.
     if "controller_menu_navigation" not in settings:
@@ -1487,16 +1557,106 @@ def controller_menu_nav_menu():
         ("exit", "Back to Controller Keybinds")
     ]
     
-    # Define which keys are bindable.
+    # Define which options are bindable.
     bindable_keys = {"up", "down", "select", "back"}
 
     option_spacing = 45
     base_y = 150  # Starting vertical position for the options
 
+    # --- Sub-Function: process_menu_nav_events ---
+    def process_menu_nav_events(options, selected_option, changing_button, enter_pressed):
+        """
+        Processes both keyboard and controller (including D-pad) navigation events
+        for the controller menu navigation bindings menu. Returns updated values for 
+        selected_option, changing_button, enter_pressed, and an action flag.
+        
+        NOTE:
+          - In this menu, binding capture is triggered by Enter (keyboard) or the controller
+            select button. However, once binding mode is active (i.e. changing_button is not None),
+            only controller key inputs (JOYBUTTONDOWN) will update the binding in settings["controller_menu_navigation"].
+          - Keyboard events are allowed for navigation but are not used to update the binding.
+          - The action flag will be "exit" (or "back") if the user selects that option.
+        """
+        action = None  # Will hold the action if one is triggered.
+        # ---------------------- Process Each Event ----------------------
+        for event in pygame.event.get():
+            # ---------------------- QUIT EVENT ----------------------
+            if event.type == pygame.QUIT:
+                save_settings(settings)
+                pygame.quit()
+                sys.exit()
+            # ---------------------- MUSIC END EVENT ----------------------
+            elif event.type == MUSIC_END_EVENT:
+                handle_music_end_event()
+            # ---------------------- CONTROLLER EVENTS (JOYBUTTONDOWN) ----------------------
+            elif event.type == pygame.JOYBUTTONDOWN:
+                if changing_button is not None:
+                    # In binding mode: capture the controller button and update the binding.
+                    settings["controller_menu_navigation"][changing_button] = event.button
+                    changing_button = None
+                else:
+                    # Not in binding mode: process navigation via controller buttons.
+                    # Lookup our controller navigation keys from settings.
+                    nav = settings.get("controller_menu_navigation", {})
+                    up_btn = nav.get("up")
+                    down_btn = nav.get("down")
+                    select_btn = nav.get("select")
+                    back_btn = nav.get("back")
+                    if up_btn is not None and event.button == up_btn:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif down_btn is not None and event.button == down_btn:
+                        selected_option = (selected_option + 1) % len(options)
+                    elif back_btn is not None and event.button == back_btn:
+                        action = "back"
+                    elif select_btn is not None and event.button == select_btn:
+                        current_option = options[selected_option][0]
+                        if current_option == "exit":
+                            action = "exit"
+                        else:
+                            # Trigger binding capture for this option if it is bindable.
+                            if current_option in bindable_keys:
+                                changing_button = current_option
+            # ---------------------- D-PAD (JOYHATMOTION) NAVIGATION ----------------------
+            elif event.type == pygame.JOYHATMOTION:
+                if changing_button is None:
+                    hx, hy = event.value
+                    if hy == 1:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif hy == -1:
+                        selected_option = (selected_option + 1) % len(options)
+            # ---------------------- KEYBOARD EVENTS (NAVIGATION) ----------------------
+            elif event.type == pygame.KEYDOWN:
+                # Keyboard navigation is allowed, but keyboard keys will not update the binding.
+                if event.key == pygame.K_ESCAPE:
+                    if changing_button is not None:
+                        changing_button = None  # Cancel pending binding.
+                    else:
+                        action = "back"
+                elif changing_button is None:
+                    if event.key == pygame.K_UP:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif event.key == pygame.K_DOWN:
+                        selected_option = (selected_option + 1) % len(options)
+                    # Use Enter to trigger binding capture (keyboard can trigger, but binding update is done via controller).
+                    elif event.key == pygame.K_RETURN and not enter_pressed:
+                        enter_pressed = True
+                        current_option = options[selected_option][0]
+                        if current_option == "exit":
+                            action = "exit"
+                        else:
+                            if current_option in bindable_keys:
+                                changing_button = current_option
+            elif event.type == pygame.KEYUP:
+                if event.key == pygame.K_RETURN:
+                    enter_pressed = False
+        return selected_option, changing_button, enter_pressed, action
+
+    # ---------------------- MAIN LOOP FOR CONTROLLER MENU NAV KEYBINDS ----------------------
     while True:
         screen.fill(BLACK)
         title_text = tetris_font_large.render("Menu Nav Bindings", True, WHITE)
-        scaled_title = pygame.transform.scale(title_text, (int(title_text.get_width() * 0.8), int(title_text.get_height() * 0.8)))
+        scaled_title = pygame.transform.scale(title_text, (int(title_text.get_width() * 0.8),
+                                                             int(title_text.get_height() * 0.8)))
         screen.blit(scaled_title, (SCREEN_WIDTH // 2 - scaled_title.get_width() // 2, 50))
         
         # Render each menu navigation option.
@@ -1504,14 +1664,12 @@ def controller_menu_nav_menu():
             color = RED if i == selected_option else WHITE
             if key in bindable_keys:
                 current_binding = settings["controller_menu_navigation"].get(key)
-                # If a binding exists, show it; otherwise, display just the label.
                 if current_binding is not None:
                     display_text = f"{label}: Button {current_binding}"
                 else:
                     display_text = label
             else:
                 display_text = label  # For non-bindable options.
-            
             option_text = tetris_font_medium.render(display_text, True, color)
             # If this is the "exit" option, scale it.
             if key == "exit":
@@ -1519,44 +1677,15 @@ def controller_menu_nav_menu():
                                                                      int(option_text.get_height() * 0.85)))
             y_coordinate = base_y + i * option_spacing
             screen.blit(option_text, (SCREEN_WIDTH // 2 - option_text.get_width() // 2, y_coordinate))
-            
+        
         pygame.display.flip()
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type == MUSIC_END_EVENT:
-                handle_music_end_event()
-            elif event.type == pygame.KEYDOWN:
-                # ESC cancels a pending binding or exits the submenu.
-                if event.key == pygame.K_ESCAPE:
-                    if changing_button is not None:
-                        changing_button = None  # Cancel pending binding.
-                    else:
-                        return
-                # If a binding capture is active, ignore other keyboard input.
-                elif changing_button is not None:
-                    pass
-                else:
-                    if event.key == pygame.K_UP:
-                        selected_option = (selected_option - 1) % len(menu_nav_options)
-                    elif event.key == pygame.K_DOWN:
-                        selected_option = (selected_option + 1) % len(menu_nav_options)
-                    elif event.key == pygame.K_RETURN:
-                        current_option = menu_nav_options[selected_option][0]
-                        if current_option == "exit":
-                            return
-                        else:
-                            # Enter binding capture mode for the chosen menu navigation option.
-                            changing_button = current_option
-            elif event.type == pygame.JOYBUTTONDOWN:
-                if changing_button is not None:
-                    settings["controller_menu_navigation"][changing_button] = event.button
-                    changing_button = None
-            elif event.type == pygame.KEYUP:
-                pass
+        selected_option, changing_button, enter_pressed, action = process_menu_nav_events(
+            menu_nav_options, selected_option, changing_button, enter_pressed
+        )
+        if action is not None:
+            if action == "exit" or action == "back":
+                return
 
 def pause_game():
     global settings
