@@ -1,4 +1,4 @@
-# Game Ver 1.9.2 #BETA_TEST
+# Game Ver 1.9.1.1 #Refactord
 # Dependencies: pip install mutagen
 
 import pygame
@@ -16,6 +16,8 @@ import copy  # Needed for deepcopy
 pygame.init()
 pygame.mixer.set_num_channels(32)
 pygame.mixer.init()
+
+GAME_CAPTION = "TetraFusion 1.9.2"  # Moved to top
 
 last_track_index = None  # Stores the current track index at game over.
 
@@ -229,7 +231,7 @@ except FileNotFoundError:
     sys.exit()
 
 screen = pygame.display.set_mode((SCREEN_WIDTH + SUBWINDOW_WIDTH, SCREEN_HEIGHT))
-pygame.display.set_caption("TetraFusion 1.9.2")
+pygame.display.set_caption(GAME_CAPTION)
 clock = pygame.time.Clock()
 
 subwindow_visible = True
@@ -259,7 +261,7 @@ def load_settings(filename="settings.json"):
         "difficulty": "normal",
         "flame_trails": True,
         "grid_color": [200, 200, 200],
-        "grid_opacity": 128,
+        "grid_opacity": 255,
         "grid_lines": True,
         "ghost_piece": True,
         "music_enabled": True,
@@ -312,7 +314,7 @@ def save_settings(settings, filename="settings.json"):
             "difficulty": settings.get("difficulty", "normal"),
             "flame_trails": settings.get("flame_trails", True),
             "grid_color": settings.get("grid_color", [200, 200, 200]),
-            "grid_opacity": settings.get("grid_opacity", 128),
+            "grid_opacity": settings.get("grid_opacity", 255),
             "grid_lines": settings.get("grid_lines", True),
             "ghost_piece": settings.get("ghost_piece", True),
             "music_enabled": settings.get("music_enabled", True),
@@ -486,17 +488,19 @@ def draw_3d_block(screen, color, x, y, block_size):
     pygame.draw.polygon(screen, outline_color, left_polygon, 2)
     pygame.draw.polygon(screen, outline_color, right_polygon, 2)
 
+# ---------- FIXED draw_3d_grid (using full opacity value and thicker lines) ----------
 def draw_3d_grid(grid_surface, grid_color, grid_opacity):
     if not settings.get('grid_lines', True):
-        grid_surface.fill((0,0,0,0))
+        grid_surface.fill((0, 0, 0, 0))
         return
     grid_surface.fill((0, 0, 0, 0))
-    factor = grid_opacity / 192.0
-    line_color = tuple(int(grid_color[i]*factor) for i in range(3))
+    alpha_color = (grid_color[0], grid_color[1], grid_color[2], grid_opacity)
+    thickness = 2  # Thicker grid lines
     for x in range(0, SCREEN_WIDTH, BLOCK_SIZE):
-        pygame.draw.line(grid_surface, line_color, (x,0), (x,SCREEN_HEIGHT), 1)
+        pygame.draw.line(grid_surface, alpha_color, (x, 0), (x, SCREEN_HEIGHT), thickness)
     for y in range(0, SCREEN_HEIGHT, BLOCK_SIZE):
-        pygame.draw.line(grid_surface, line_color, (0,y), (SCREEN_WIDTH,y), 1)
+        pygame.draw.line(grid_surface, alpha_color, (0, y), (SCREEN_WIDTH, y), thickness)
+    pygame.draw.line(grid_surface, alpha_color, (SCREEN_WIDTH - 1, 0), (SCREEN_WIDTH - 1, SCREEN_HEIGHT), thickness)
 
 def load_high_score(filename="high_score.txt"):
     try:
@@ -535,7 +539,7 @@ def valid_position(tetromino, offset, grid):
             if cell:
                 x = offset[0] + cx
                 y = offset[1] + cy
-                if x < 0 or x >= GRID_WIDTH or y >= GRID_HEIGHT or (y>=0 and grid[y][x]):
+                if x < 0 or x >= GRID_WIDTH or y >= GRID_HEIGHT or (y >= 0 and grid[y][x]):
                     return False
     return True
 
@@ -551,7 +555,7 @@ def rotate_tetromino_with_kick(tetromino, offset, grid):
 def clear_lines(grid):
     full_lines = [y for y in range(GRID_HEIGHT) if all(grid[y])]
     if full_lines:
-        if len(full_lines)==4 and multiple_line_clear_sound:
+        if len(full_lines) == 4 and multiple_line_clear_sound:
             multiple_line_clear_sound.play()
         elif line_clear_sound:
             line_clear_sound.play()
@@ -694,9 +698,8 @@ def draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_t
     
     screen.blit(subwindow, (SCREEN_WIDTH, 0))
 
-# -------------------------- Ghost Piece --------------------------
-def draw_ghost_piece(tetromino, offset, grid):
-    # Only draw the ghost piece if enabled in settings.
+# ---------- Updated Ghost Piece with Color Option ----------
+def draw_ghost_piece(tetromino, offset, grid, color):
     if not settings.get('ghost_piece', True):
         return
 
@@ -705,20 +708,18 @@ def draw_ghost_piece(tetromino, offset, grid):
     while valid_position(tetromino, [offset[0], ghost_y + 1], grid):
         ghost_y += 1
     ghost_offset = [offset[0], ghost_y]
-
-    # Set opacity: 10% opaque
-    ghost_fill_alpha = int(255 * 0.1)      # (adjust as needed)
-    ghost_outline_alpha = int(255 * 0.1)     # (adjust as needed)
-
-    # Draw the entire ghost tetromino at its landing position.
+    ghost_fill_alpha = int(255 * 0.2)   # 20% opacity fill
+    ghost_outline_alpha = int(255 * 0.4)  # 40% opacity outline
+    border_thickness = 2
     for cy, row in enumerate(tetromino):
         for cx, cell in enumerate(row):
             if cell:
                 x = (ghost_offset[0] + cx) * BLOCK_SIZE
                 y = (ghost_offset[1] + cy) * BLOCK_SIZE
                 ghost_block = pygame.Surface((BLOCK_SIZE, BLOCK_SIZE), pygame.SRCALPHA)
-                ghost_block.fill((200, 200, 200, ghost_fill_alpha))
-                pygame.draw.rect(ghost_block, (255, 255, 255, ghost_outline_alpha), (0, 0, BLOCK_SIZE, BLOCK_SIZE), 2)
+                ghost_block.fill((color[0], color[1], color[2], ghost_fill_alpha))
+                pygame.draw.rect(ghost_block, (color[0], color[1], color[2], ghost_outline_alpha),
+                                 (0, 0, BLOCK_SIZE, BLOCK_SIZE), border_thickness)
                 screen.blit(ghost_block, (x, y))
 
     # Overlay the shadow on supported cells.
@@ -857,7 +858,8 @@ def main_menu():
                     current_track_index = (current_track_index + 1) % len(custom_music_playlist)
                     try:
                         pygame.mixer.music.load(custom_music_playlist[current_track_index])
-                        pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when track ends
+                        pygame.mixer.music.play(0)
+                        pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
                     except Exception as e:
                         print(f"Error loading next track: {e}")
             # --- Keyboard Input ---
@@ -902,6 +904,15 @@ def main_menu():
                         save_settings(settings)
                         pygame.quit()
                         sys.exit()
+        # --- Fallback for custom music looping ---
+        if settings.get('use_custom_music', False) and not pygame.mixer.music.get_busy():
+            current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+            try:
+                pygame.mixer.music.load(custom_music_playlist[current_track_index])
+                pygame.mixer.music.play(0)
+                pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
+            except Exception as e:
+                print(f"Error loading next track: {e}")
         clock.tick(30)
 
 def options_menu():
@@ -1188,7 +1199,7 @@ def run_game():
     difficulty = settings['difficulty']
     flame_trails_enabled = settings['flame_trails']
     grid_color = tuple(settings['grid_color'])
-    grid_opacity = settings.get('grid_opacity', 128)
+    grid_opacity = settings.get('grid_opacity', 255)
     grid_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
     draw_3d_grid(grid_surface, grid_color, grid_opacity)
 
@@ -1440,12 +1451,11 @@ def run_game():
     
     # Drawing related stuff
     def draw_game(shake_x, shake_y):
-        # Clear screen and draw grid surface
+        # Clear screen
         screen.fill(BLACK)
-        screen.blit(grid_surface, (shake_x, shake_y))
     
         if not in_level_transition:
-            # Draw grid blocks and grid lines
+            # First, draw all placed blocks from the grid
             for y in range(GRID_HEIGHT):
                 for x in range(GRID_WIDTH):
                     if grid[y][x]:
@@ -1453,15 +1463,7 @@ def run_game():
                                     x * BLOCK_SIZE + shake_x,
                                     y * BLOCK_SIZE + shake_y,
                                     BLOCK_SIZE)
-                    if settings.get('grid_lines', True):
-                        pygame.draw.rect(screen, grid_color,
-                                        (x * BLOCK_SIZE + shake_x,
-                                        y * BLOCK_SIZE + shake_y,
-                                        BLOCK_SIZE, BLOCK_SIZE), 1)
-            # Draw ghost piece if enabled
-            if settings.get('ghost_piece', True):
-                draw_ghost_piece(tetromino, offset, grid)
-            # Draw the current tetromino
+            # Then, draw the current falling tetromino
             for cy, row in enumerate(tetromino):
                 for cx, cell in enumerate(row):
                     if cell:
@@ -1469,6 +1471,11 @@ def run_game():
                                     (offset[0] + cx) * BLOCK_SIZE + shake_x,
                                     (offset[1] + cy) * BLOCK_SIZE + shake_y,
                                     BLOCK_SIZE)
+            # Now, overlay the grid (which is drawn using the updated opacity and thicker lines)
+            screen.blit(grid_surface, (shake_x, shake_y))
+            # Draw the ghost piece over the grid using the custom color options
+            if settings.get('ghost_piece', True):
+                draw_ghost_piece(tetromino, offset, grid, COLORS[color_index - 1])
             # Draw explosions, trail particles, and dust particles
             for explosion in explosion_particles:
                 explosion.draw(screen, (shake_x, shake_y))
@@ -1477,7 +1484,7 @@ def run_game():
             for particle in dust_particles:
                 particle.draw(screen)
         else:
-            # If in level transition, draw grid blocks with overlay
+            # In level transition, draw grid blocks with overlay
             for y in range(GRID_HEIGHT):
                 for x in range(GRID_WIDTH):
                     if grid[y][x]:
@@ -1494,7 +1501,7 @@ def run_game():
             level_shake_y = random.randint(-10, 10)
             screen.blit(level_text, (SCREEN_WIDTH//2 - level_text.get_width()//2 + level_shake_x,
                                     SCREEN_HEIGHT//2 - level_text.get_height()//2 + level_shake_y))
-        # Draw subwindow with game info
+        # Draw subwindow with game info and update display
         draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_total,
                     is_tetris, tetris_last_flash, tetris_flash_time)
         pygame.display.flip()
@@ -1558,7 +1565,14 @@ def run_game():
 
         # --- Process Events ---
         handle_events(current_time)
-
+        
+        # Check if a button command was issued
+        if game_command == "restart" or game_command == "menu":
+            return  # Exit run_game() to restart or return to the main menu.
+        elif game_command == "skip":
+            skip_current_track()   # Change the track.
+            game_command = None      # Reset the command so we don't repeatedly skip.
+            
         # --- Poll Joypad for Continuous Movement ---
         if joy is not None:
             # Horizontal movement:
