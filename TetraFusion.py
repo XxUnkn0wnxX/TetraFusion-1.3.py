@@ -956,19 +956,18 @@ def main_menu():
                     save_settings(settings)
                     pygame.quit()
                     sys.exit()
-            # --- Joypad Hat (D-pad) Input ---
-            elif event.type == pygame.JOYHATMOTION:
-                cur_time = pygame.time.get_ticks()
-                if cur_time - last_move > joy_delay:
-                    hx, hy = event.value
-                    if hy == -1:
-                        selected_index = (selected_index + 1) % len(menu_options)
-                    elif hy == 1:
-                        selected_index = (selected_index - 1) % len(menu_options)
-                    last_move = cur_time
-            # --- Joypad Button Input (button 0 acts as select) ---
+            # --- Controller Navigation using controller_menu_navigation settings ---
             elif event.type == pygame.JOYBUTTONDOWN:
-                if event.button == 0:
+                nav = settings.get("controller_menu_navigation", {})
+                up_btn = nav.get("up")
+                down_btn = nav.get("down")
+                select_btn = nav.get("select")
+                # Check if the pressed button matches one of our navigation bindings.
+                if up_btn is not None and event.button == up_btn:
+                    selected_index = (selected_index - 1) % len(menu_options)
+                elif down_btn is not None and event.button == down_btn:
+                    selected_index = (selected_index + 1) % len(menu_options)
+                elif select_btn is not None and event.button == select_btn:
                     if menu_options[selected_index] == "Start":
                         return
                     elif menu_options[selected_index] == "Options":
@@ -977,6 +976,14 @@ def main_menu():
                         save_settings(settings)
                         pygame.quit()
                         sys.exit()
+            # --- Optional: D-Pad (Hat) Navigation ---
+            elif event.type == pygame.JOYHATMOTION:
+                hx, hy = event.value
+                if hy == 1:
+                    selected_index = (selected_index - 1) % len(menu_options)
+                elif hy == -1:
+                    selected_index = (selected_index + 1) % len(menu_options)
+        
         # Fallback for Custom Music Looping:
         if settings.get('use_custom_music', False):
             if not pygame.mixer.music.get_busy() and not fallback_triggered:
@@ -986,12 +993,12 @@ def main_menu():
                 # Reset the flag when music is playing normally.
                 fallback_triggered = False
 
-        # Additionally, you could handle the skip command:
+        # Additionally, handle the skip command:
         if game_command == "skip":
             skip_current_track()
             game_command = None
 
-    clock.tick(30)
+        clock.tick(30)
 
 def options_menu():
     global settings, last_track_index
@@ -1022,6 +1029,80 @@ def options_menu():
     # Calculate base_y so that the list is vertically centered.
     base_y = (SCREEN_HEIGHT - total_options_height) // 2
 
+    # --- Sub-Function: process_navigation_events ---
+    def process_navigation_events(options, selected_option, changing_key, enter_pressed):
+        """
+        Processes both keyboard and controller (including D-pad) navigation events
+        for the options menu. Returns updated values for selected_option, changing_key,
+        enter_pressed, and an action flag (which will be the current option key if selected,
+        or "back" if the user wants to exit).
+        """
+        action = None  # Action flag to indicate an option was chosen.
+        for event in pygame.event.get():
+            # ---------------------- QUIT EVENT ----------------------
+            if event.type == pygame.QUIT:
+                save_settings(settings)
+                pygame.quit()
+                sys.exit()
+            # ---------------------- MUSIC END EVENT ----------------------
+            elif event.type == MUSIC_END_EVENT:
+                handle_music_end_event()
+            # ---------------------- CONTROLLER EVENTS (JOYBUTTONDOWN) ----------------------
+            elif event.type == pygame.JOYBUTTONDOWN:
+                if changing_key is None:  # Only process navigation if not capturing a new key binding.
+                    nav = settings.get("controller_menu_navigation", {})
+                    up_btn = nav.get("up")
+                    down_btn = nav.get("down")
+                    select_btn = nav.get("select")
+                    back_btn = nav.get("back")
+                    if up_btn is not None and event.button == up_btn:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif down_btn is not None and event.button == down_btn:
+                        selected_option = (selected_option + 1) % len(options)
+                    elif select_btn is not None and event.button == select_btn:
+                        current_key = options[selected_option][0]
+                        # For options that capture keyboard bindings, ignore controller select.
+                        if current_key not in settings['controls']:
+                            action = current_key
+                    elif back_btn is not None and event.button == back_btn:
+                        action = "back"
+            # ---------------------- D-PAD (JOYHATMOTION) NAVIGATION ----------------------
+            elif event.type == pygame.JOYHATMOTION:
+                if changing_key is None:
+                    hx, hy = event.value
+                    if hy == 1:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif hy == -1:
+                        selected_option = (selected_option + 1) % len(options)
+            # ---------------------- KEYBOARD EVENTS (NAVIGATION & BINDING) ----------------------
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    if changing_key is not None:
+                        changing_key = None  # Cancel pending binding capture.
+                    else:
+                        action = "back"
+                elif changing_key is not None:
+                    # When capturing a new key binding, only keyboard keys are processed.
+                    settings['controls'][changing_key] = event.key
+                    changing_key = None
+                elif event.key == pygame.K_RETURN and not enter_pressed:
+                    enter_pressed = True  # Mark Enter as pressed.
+                    current_key = options[selected_option][0]
+                    if current_key in settings['controls']:
+                        # Begin capturing a new keyboard binding.
+                        changing_key = current_key
+                    else:
+                        action = current_key
+                elif event.key == pygame.K_UP:
+                    selected_option = (selected_option - 1) % len(options)
+                elif event.key == pygame.K_DOWN:
+                    selected_option = (selected_option + 1) % len(options)
+            elif event.type == pygame.KEYUP:
+                if event.key == pygame.K_RETURN:
+                    enter_pressed = False
+        return selected_option, changing_key, enter_pressed, action
+
+    # ---------------------- MAIN LOOP FOR OPTIONS MENU ----------------------
     while True:
         screen.fill(BLACK)
         title_text = tetris_font_large.render("Options", True, WHITE)
@@ -1050,120 +1131,90 @@ def options_menu():
             elif key == 'select_music_dir':
                 dir_display = settings.get('music_directory', '')
                 text = f"Dir: {dir_display}" if dir_display else "Select Music Directory: Not Selected"
-            else:
-                text = label
             option_text = tetris_font_medium.render(text, True, color)
+            # Optionally scale the text for select_music_dir.
             if key == 'select_music_dir' and settings.get('music_directory', ''):
                 scale_factor = 0.6
                 scaled_width = int(option_text.get_width() * scale_factor)
                 scaled_height = int(option_text.get_height() * scale_factor)
                 option_text = pygame.transform.scale(option_text, (scaled_width, scaled_height))
-
             y_coordinate = base_y + i * option_spacing
             screen.blit(option_text, (SCREEN_WIDTH // 2 - option_text.get_width() // 2, y_coordinate))
-
         
         pygame.display.flip()
 
-        # Event handling
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type == MUSIC_END_EVENT:
-                handle_music_end_event()
-            elif event.type == pygame.KEYDOWN:
-                # First, check if ESC is pressed.
-                if event.key == pygame.K_ESCAPE:
-                    if changing_key is not None:
-                        changing_key = None  # Cancel pending binding
+        # Call the navigation sub-function to process events.
+        selected_option, changing_key, enter_pressed, action = process_navigation_events(
+            options, selected_option, changing_key, enter_pressed
+        )
+        # Process the returned action flag.
+        if action is not None:
+            current_key = action
+            if current_key == 'keybinds':
+                keyboard_keybinds_menu()
+                pygame.event.clear()
+            elif current_key == 'controller_keybinds':
+                controller_keybinds_menu()
+                pygame.event.clear()
+            elif current_key == 'difficulty':
+                difficulties = ['easy', 'normal', 'hard', 'very hard']
+                new_idx = (difficulties.index(settings['difficulty']) + 1) % len(difficulties)
+                settings['difficulty'] = difficulties[new_idx]
+            elif current_key == 'flame_trails':
+                settings['flame_trails'] = not settings['flame_trails']
+            elif current_key == 'grid_opacity':
+                if settings['grid_opacity'] < 255:
+                    new_opacity = settings['grid_opacity'] + 64
+                    settings['grid_opacity'] = new_opacity if new_opacity <= 255 else 255
+                else:
+                    settings['grid_opacity'] = 0
+            elif current_key == 'grid_lines':
+                settings['grid_lines'] = not settings.get('grid_lines', True)
+            elif current_key == 'ghost_piece':
+                settings['ghost_piece'] = not settings.get('ghost_piece', True)
+            elif current_key == 'music_enabled':
+                settings['music_enabled'] = not settings.get('music_enabled', True)
+                if not settings['music_enabled']:
+                    stop_music()
+                else:
+                    if settings.get('use_custom_music', False):
+                        play_custom_music(settings)
                     else:
-                        save_settings(settings)
-                        return
-                # If we're waiting for a new key binding, update it immediately.
-                elif changing_key is not None:
-                    settings['controls'][changing_key] = event.key
-                    changing_key = None
-                # Otherwise, process navigation/selection.
-                elif event.key == pygame.K_RETURN and not enter_pressed:
-                    enter_pressed = True  # Mark Enter as pressed
-                    current_key = options[selected_option][0]
-                    if current_key == 'keybinds':
-                        keyboard_keybinds_menu()
-                        enter_pressed = False
-                        pygame.event.clear()
-                    elif current_key == 'controller_keybinds':
-                        controller_keybinds_menu()
-                        enter_pressed = False
-                        pygame.event.clear()
-                    elif current_key in settings['controls']:
-                        changing_key = current_key
-                    elif current_key == 'difficulty':
-                        difficulties = ['easy', 'normal', 'hard', 'very hard']
-                        new_idx = (difficulties.index(settings['difficulty']) + 1) % len(difficulties)
-                        settings['difficulty'] = difficulties[new_idx]
-                    elif current_key == 'flame_trails':
-                        settings['flame_trails'] = not settings['flame_trails']
-                    elif current_key == 'grid_opacity':
-                        if settings['grid_opacity'] < 255:
-                            new_opacity = settings['grid_opacity'] + 64
-                            settings['grid_opacity'] = new_opacity if new_opacity <= 255 else 255
-                        else:
-                            settings['grid_opacity'] = 0
-                    elif current_key == 'grid_lines':
-                        settings['grid_lines'] = not settings.get('grid_lines', True)
-                    elif current_key == 'ghost_piece':
-                        settings['ghost_piece'] = not settings.get('ghost_piece', True)
-                    elif current_key == 'music_enabled':
-                        settings['music_enabled'] = not settings.get('music_enabled', True)
-                        if not settings['music_enabled']:
-                            stop_music()
-                        else:
-                            if settings.get('use_custom_music', False):
-                                play_custom_music(settings)
-                            else:
-                                try:
-                                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
-                                    pygame.mixer.music.play(-1)
-                                except Exception as e:
-                                    print(f"Error loading default music: {e}")
-                    elif current_key == 'use_custom_music':
-                        settings['use_custom_music'] = not settings.get('use_custom_music', False)
-                        last_track_index = None
-                        if settings.get('music_enabled', True):
-                            if settings.get('use_custom_music', False):
-                                play_custom_music(settings)
-                            else:
-                                try:
-                                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
-                                    pygame.mixer.music.play(-1)
-                                except Exception as e:
-                                    print(f"Error loading default background music: {e}")
-                        else:
-                            stop_music()
-                    elif current_key == 'select_music_dir':
-                        selected_dir = select_music_directory()
-                        if selected_dir:
-                            settings['music_directory'] = selected_dir
-                            last_track_index = None
-                            if settings.get('use_custom_music', False) and settings.get('music_enabled', True):
-                                play_custom_music(settings)
-                    elif current_key == 'back':
-                        save_settings(settings)
-                        return
-                elif event.key == pygame.K_UP:
-                    selected_option = (selected_option - 1) % len(options)
-                elif event.key == pygame.K_DOWN:
-                    selected_option = (selected_option + 1) % len(options)
-            elif event.type == pygame.KEYUP:
-                if event.key == pygame.K_RETURN:
-                    enter_pressed = False  # Reset flag when Enter is released
+                        try:
+                            pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                            pygame.mixer.music.play(-1)
+                        except Exception as e:
+                            print(f"Error loading default music: {e}")
+            elif current_key == 'use_custom_music':
+                settings['use_custom_music'] = not settings.get('use_custom_music', False)
+                last_track_index = None
+                if settings.get('music_enabled', True):
+                    if settings.get('use_custom_music', False):
+                        play_custom_music(settings)
+                    else:
+                        try:
+                            pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                            pygame.mixer.music.play(-1)
+                        except Exception as e:
+                            print(f"Error loading default background music: {e}")
+                else:
+                    stop_music()
+            elif current_key == 'select_music_dir':
+                selected_dir = select_music_directory()
+                if selected_dir:
+                    settings['music_directory'] = selected_dir
+                    last_track_index = None
+                    if settings.get('use_custom_music', False) and settings.get('music_enabled', True):
+                        play_custom_music(settings)
+            elif current_key == 'back':
+                save_settings(settings)
+                return
 
 # Options Keyboard Controls            
 def keyboard_keybinds_menu():
     selected_option = 0
     changing_key = None
+    enter_pressed = False  # Flag to track whether Enter is held down
 
     # Ensure the music skip key is available.
     if 'skip_track' not in settings['controls']:
@@ -1185,10 +1236,104 @@ def keyboard_keybinds_menu():
     option_spacing = 45
     base_y = 150  # starting vertical position
 
+    # --- Sub-Function: process_kb_nav_events ---
+    def process_kb_nav_events(options, selected_option, changing_key, enter_pressed):
+        """
+        Processes both keyboard and controller (including D-pad) navigation events
+        for the keyboard keybinds menu. Returns updated values for selected_option,
+        changing_key, enter_pressed, and an action flag.
+        
+        NOTE:
+          - This menu supports full controller navigation so that you can move up and down
+            and use the controller "back" button to exit.
+          - When the controller's select button is pressed on a bindable option,
+            binding capture is triggered (changing_key is set) so that subsequent controller keys
+            will not bind anything; only a keyboard key will be accepted.
+          - The action flag will be "back" if the user wants to exit, or None otherwise.
+        """
+        action = None  # Will hold the action if one is triggered.
+        # ---------------------- Process Each Event ----------------------
+        for event in pygame.event.get():
+            # ---------------------- QUIT EVENT ----------------------
+            if event.type == pygame.QUIT:
+                save_settings(settings)
+                pygame.quit()
+                sys.exit()
+            # ---------------------- MUSIC END EVENT ----------------------
+            elif event.type == MUSIC_END_EVENT:
+                handle_music_end_event()
+            # ---------------------- CONTROLLER EVENTS (JOYBUTTONDOWN) ----------------------
+            elif event.type == pygame.JOYBUTTONDOWN:
+                # Only process controller navigation if NOT in binding mode.
+                if changing_key is None:
+                    nav = settings.get("controller_menu_navigation", {})
+                    up_btn = nav.get("up")
+                    down_btn = nav.get("down")
+                    select_btn = nav.get("select")
+                    back_btn = nav.get("back")
+                    if up_btn is not None and event.button == up_btn:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif down_btn is not None and event.button == down_btn:
+                        selected_option = (selected_option + 1) % len(options)
+                    # Controller Back button exits the menu.
+                    elif back_btn is not None and event.button == back_btn:
+                        action = "back"
+                    # Controller Select triggers binding mode for bindable options.
+                    elif select_btn is not None and event.button == select_btn:
+                        current_key = options[selected_option][0]
+                        if current_key == "back":
+                            action = "back"
+                        else:
+                            # Trigger binding capture if this option is bindable.
+                            if current_key in settings['controls']:
+                                changing_key = current_key
+            # ---------------------- D-PAD (JOYHATMOTION) NAVIGATION ----------------------
+            elif event.type == pygame.JOYHATMOTION:
+                if changing_key is None:
+                    hx, hy = event.value
+                    if hy == 1:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif hy == -1:
+                        selected_option = (selected_option + 1) % len(options)
+            # ---------------------- KEYBOARD EVENTS (NAVIGATION & BINDING) ----------------------
+            elif event.type == pygame.KEYDOWN:
+                # ESC cancels binding capture or exits the menu.
+                if event.key == pygame.K_ESCAPE:
+                    if changing_key is not None:
+                        changing_key = None  # Cancel pending binding
+                    else:
+                        action = "back"
+                # If waiting for a new key, capture the key press (keyboard only).
+                elif changing_key is not None:
+                    settings['controls'][changing_key] = event.key
+                    changing_key = None
+                # Process selection with Enter (keyboard only).
+                elif event.key == pygame.K_RETURN and not enter_pressed:
+                    enter_pressed = True  # Mark Enter as pressed.
+                    current_key = options[selected_option][0]
+                    if current_key == 'back':
+                        action = "back"
+                    else:
+                        # Begin capturing a new binding for this option (keyboard only).
+                        changing_key = current_key
+                # Navigate using Up arrow.
+                elif event.key == pygame.K_UP:
+                    selected_option = (selected_option - 1) % len(options)
+                # Navigate using Down arrow.
+                elif event.key == pygame.K_DOWN:
+                    selected_option = (selected_option + 1) % len(options)
+            # ---------------------- KEYUP EVENT ----------------------
+            elif event.type == pygame.KEYUP:
+                if event.key == pygame.K_RETURN:
+                    enter_pressed = False  # Reset flag when Enter is released
+        return selected_option, changing_key, enter_pressed, action
+
+    # ---------------------- MAIN LOOP FOR KEYBOARD KEYBINDS MENU ----------------------
     while True:
         screen.fill(BLACK)
         title_text = tetris_font_large.render("Keyboard Keybinds", True, WHITE)
-        scaled_title = pygame.transform.scale(title_text, (int(title_text.get_width() * 0.8), int(title_text.get_height() * 0.8)))
+        scaled_title = pygame.transform.scale(title_text, (int(title_text.get_width() * 0.8),
+                                                             int(title_text.get_height() * 0.8)))
         screen.blit(scaled_title, (SCREEN_WIDTH // 2 - scaled_title.get_width() // 2, 50))
         
         # Render each keybind option.
@@ -1203,38 +1348,16 @@ def keyboard_keybinds_menu():
             screen.blit(option_text, (SCREEN_WIDTH // 2 - option_text.get_width() // 2, y_coordinate))
         
         pygame.display.flip()
-        
-        # Event handling
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type == MUSIC_END_EVENT:
-                handle_music_end_event()
-            elif event.type == pygame.KEYDOWN:
-                # ESC cancels binding capture or exits submenu.
-                if event.key == pygame.K_ESCAPE:
-                    if changing_key is not None:
-                        changing_key = None
-                    else:
-                        return
-                # If waiting for a new key, capture any key press.
-                elif changing_key is not None:
-                    settings['controls'][changing_key] = event.key
-                    changing_key = None
-                else:
-                    if event.key == pygame.K_UP:
-                        selected_option = (selected_option - 1) % len(keybind_options)
-                    elif event.key == pygame.K_DOWN:
-                        selected_option = (selected_option + 1) % len(keybind_options)
-                    elif event.key == pygame.K_RETURN:
-                        if keybind_options[selected_option][0] == 'back':
-                            return
-                        else:
-                            changing_key = keybind_options[selected_option][0]
-            elif event.type == pygame.KEYUP:
-                pass
+
+        # Call the navigation sub-function to process events.
+        selected_option, changing_key, enter_pressed, action = process_kb_nav_events(
+            keybind_options, selected_option, changing_key, enter_pressed
+        )
+
+        # Process any action returned from the sub-function.
+        if action is not None:
+            if action == "back":
+                return
 
 # Options Controller Controls
 def controller_keybinds_menu():
