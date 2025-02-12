@@ -1827,7 +1827,12 @@ def run_game():
     hold_piece = None
     hold_used = False
     game_command = None
-    controls = settings['controls']
+
+    # Retrieve our key mapping settings.
+    controls = settings['controls']              # Keyboard controls
+    cc = settings.get('controller_controls', {})   # Controller controls mapping
+
+    # Retrieve other settings.
     difficulty = settings['difficulty']
     flame_trails_enabled = settings['flame_trails']
     grid_color = tuple(settings['grid_color'])
@@ -1835,6 +1840,7 @@ def run_game():
     grid_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
     draw_3d_grid(grid_surface, grid_color, grid_opacity)
 
+    # Set up difficulty/fall speeds.
     difficulty_speeds = {
         'easy': 1500,
         'normal': 1000,
@@ -1844,6 +1850,7 @@ def run_game():
     base_fall_speed = difficulty_speeds.get(difficulty, 1000)
     fall_speed = base_fall_speed
 
+    # Initialize game variables.
     level = 1
     lines_cleared_total = 0
     pieces_dropped = 0
@@ -1881,46 +1888,44 @@ def run_game():
     flash_count = 0
 
     pygame.key.set_repeat(300, 100)
-
-    # For joypad continuous movement, set a rate–limit.
     last_joy_move = pygame.time.get_ticks()
-    joy_delay = 150  # milliseconds
-    
-    # -------------------------- Game Helpers --------------------------
-    
-    # tetromino Logic (hold etc..)
+    joy_delay = 150  # milliseconds delay for analog stick movement
+
+    # =========================================================================
+    # tetromino Logic (hold, hard drop, line clearing, etc.)
+    # =========================================================================
     def lock_and_update_tetromino(current_time):
         nonlocal tetromino, offset, score, game_over, grid, lines_cleared_total
-        global hold_used
+        global hold_used  # 'hold_used' is global
         nonlocal pieces_dropped, screen_shake, is_tetris, tetris_last_flash, level
         nonlocal fall_speed, transition_start_time, last_flash_time, flash_count
         nonlocal next_tetromino, shape_index, color_index, tetromino_bag
-        # Now use current_time as a parameter inside the function.
+        # Use current_time to help with timing-dependent effects.
 
-        # Calculate how far the tetromino can fall
+        # Calculate how far the tetromino can fall (for a hard drop).
         hard_drop_rows = 0
         temp_offset = offset.copy()
         while valid_position(tetromino, [temp_offset[0], temp_offset[1] + 1], grid):
             temp_offset[1] += 1
             hard_drop_rows += 1
         offset[1] = temp_offset[1]
-    
-        # Update score based on drop distance
+
+        # Update score based on drop distance.
         score += hard_drop_rows * 2
-    
-        # Generate dust particles for visual effect
+
+        # Generate dust particles for visual effect.
         for _ in range(20 + hard_drop_rows * 5):
             dust_particles.append(DustParticle(
                 (offset[0] + random.uniform(-1, len(tetromino[0]) + 1)) * BLOCK_SIZE,
                 (offset[1] + len(tetromino)) * BLOCK_SIZE
             ))
-    
-        # Check if dropping results in game over
+
+        # Check if dropping results in game over.
         if check_game_over(grid):
             game_over = True
             return
-    
-        # Lock tetromino: record its position and update grid
+
+        # Lock tetromino: record its position and update grid.
         original_grid = [row[:] for row in grid]
         place_tetromino(tetromino, offset, grid, color_index)
         hold_used = False
@@ -1928,8 +1933,8 @@ def run_game():
         lines_cleared_total += lines_cleared
         score = update_score(score, lines_cleared)
         pieces_dropped += 1
-    
-        # If any lines are cleared, trigger screen shake and explosion effects
+
+        # Trigger screen shake and explosion effects if lines were cleared.
         if lines_cleared > 0:
             screen_shake = 8 + lines_cleared * 3
             full_lines = [y for y in range(GRID_HEIGHT) if all(original_grid[y])]
@@ -1944,13 +1949,13 @@ def run_game():
                             max_speed=15,
                             duration=75
                         ))
-    
-        # Check for a Tetris (clearing 4 lines)
+
+        # Check for a Tetris (clearing 4 lines at once).
         if lines_cleared == 4:
             is_tetris = True
             tetris_last_flash = current_time
-    
-        # Level up if enough lines have been cleared
+
+        # Level up if enough lines have been cleared.
         new_level = lines_cleared_total // 10 + 1
         if new_level > level:
             level = new_level
@@ -1959,31 +1964,24 @@ def run_game():
             transition_start_time = current_time
             last_flash_time = current_time
             flash_count = 0
-    
-        # Update tetromino for next piece
+
+        # Update tetromino for the next piece.
         tetromino = next_tetromino
         shape_index = get_shape_index(tetromino) or 0
         color_index = (shape_index + level - 1) % len(COLORS) + 1
         next_tetromino = tetromino_bag.get_next_tetromino()
         offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
-    
-    # All events stored here now
-    def handle_events(current_time):
-        # Declare all run_game() local variables you'll modify:
-        nonlocal left_pressed, right_pressed, fast_fall, offset, tetromino, last_horizontal_move, shape_index, color_index, score, next_tetromino, tetris_last_flash
-        # Declare globals:
-        global hold_used, hold_piece, game_command
-        events = pygame.event.get()  # Get all events once for this frame.
-        for event in events:
-            if event.type == pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type == MUSIC_END_EVENT:
-                handle_music_end_event()
 
-        # -- Keyboard Input ---
-            elif event.type == pygame.KEYDOWN:
+    # =========================================================================
+    # Helper function: Process keyboard events using settings['controls']
+    # =========================================================================
+    def process_keyboard_events(events, current_time):
+        nonlocal left_pressed, right_pressed, fast_fall, offset, tetromino, last_horizontal_move
+        nonlocal shape_index, color_index, score, level, next_tetromino, tetromino_bag
+        global game_command, hold_used, hold_piece
+        for event in events:
+            if event.type == pygame.KEYDOWN:
+                # ------------------ Keyboard: Movement ------------------
                 if event.key == controls['left']:
                     left_pressed = True
                     new_x = offset[0] - 1
@@ -1998,6 +1996,7 @@ def run_game():
                     last_horizontal_move = current_time
                 elif event.key == controls['down']:
                     fast_fall = True
+                # ------------------ Keyboard: Rotation, Hard Drop, and Hold ------------------
                 elif event.key == controls['rotate']:
                     rotated, new_offset = rotate_tetromino_with_kick(tetromino, offset, grid)
                     tetromino, offset = rotated, new_offset
@@ -2019,6 +2018,9 @@ def run_game():
                     pause_game()
                 elif event.key == controls['hard_drop']:
                     lock_and_update_tetromino(current_time)
+                # ------------------ Keyboard: Skip Track (Music Control) ------------------
+                elif controls.get('skip_track') and event.key == controls['skip_track']:
+                    game_command = "skip"
             elif event.type == pygame.KEYUP:
                 if event.key == controls['left']:
                     left_pressed = False
@@ -2026,32 +2028,91 @@ def run_game():
                     right_pressed = False
                 elif event.key == controls['down']:
                     fast_fall = False
-            # --- Joystick Input ---
-            elif event.type == pygame.JOYBUTTONDOWN:
-                if event.button == 0:  # Rotate
+
+    # =========================================================================
+    # Helper function: Process controller events using settings['controller_controls']
+    # =========================================================================
+    def process_controller_events(events, current_time):
+        nonlocal left_pressed, right_pressed, fast_fall, offset, tetromino, last_horizontal_move
+        nonlocal shape_index, color_index, next_tetromino, tetromino_bag
+        global game_command, hold_used, hold_piece
+        for event in events:
+            if event.type == pygame.JOYBUTTONDOWN:
+                # ------------------ Controller: Digital Button Controls ------------------
+                if cc.get('left') is not None and event.button == cc.get('left'):
+                    left_pressed = True
+                    new_x = offset[0] - 1
+                    if valid_position(tetromino, [new_x, offset[1]], grid):
+                        offset[0] = new_x
+                    last_horizontal_move = current_time
+                elif cc.get('right') is not None and event.button == cc.get('right'):
+                    right_pressed = True
+                    new_x = offset[0] + 1
+                    if valid_position(tetromino, [new_x, offset[1]], grid):
+                        offset[0] = new_x
+                    last_horizontal_move = current_time
+                elif cc.get('down') is not None and event.button == cc.get('down'):
+                    fast_fall = True
+                elif cc.get('rotate') is not None and event.button == cc.get('rotate'):
                     rotated, new_offset = rotate_tetromino_with_kick(tetromino, offset, grid)
                     tetromino, offset = rotated, new_offset
-                elif event.button == 1:  # Hard drop
+                elif cc.get('hard_drop') is not None and event.button == cc.get('hard_drop'):
                     lock_and_update_tetromino(current_time)
-                elif event.button == 2:  # Hold
+                elif cc.get('hold') is not None and event.button == cc.get('hold'):
                     if not hold_used:
                         hold_used = True
                         if hold_piece is None:
                             hold_piece = copy.deepcopy(tetromino)
                             tetromino = tetromino_bag.get_next_tetromino()
+                            shape_index = get_shape_index(tetromino) or 0
+                            color_index = (shape_index + level - 1) % len(COLORS) + 1
+                            offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
                         else:
-                            temp = copy.deepcopy(tetromino)
-                            tetromino = copy.deepcopy(hold_piece)
-                            hold_piece = temp
-                        offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
-                        shape_index = get_shape_index(tetromino) or 0
-                        color_index = (shape_index + level - 1) % len(COLORS) + 1
-                elif event.button == 7:  # Pause
+                            tetromino, hold_piece = copy.deepcopy(hold_piece), copy.deepcopy(tetromino)
+                            shape_index = get_shape_index(tetromino) or 0
+                            color_index = (shape_index + level - 1) % len(COLORS) + 1
+                            offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
+                elif cc.get('pause') is not None and event.button == cc.get('pause'):
                     pause_game()
+                elif cc.get('skip_track') is not None and event.button == cc.get('skip_track'):
+                    game_command = "skip"
+            elif event.type == pygame.JOYBUTTONUP:
+                # ------------------ Controller: Button Release (reset flags) ------------------
+                if cc.get('left') is not None and event.button == cc.get('left'):
+                    left_pressed = False
+                elif cc.get('right') is not None and event.button == cc.get('right'):
+                    right_pressed = False
+                elif cc.get('down') is not None and event.button == cc.get('down'):
+                    fast_fall = False
             elif event.type == pygame.JOYHATMOTION:
-                pass
-            # --- Mouse Input ---
-            elif event.type == pygame.MOUSEBUTTONDOWN:
+                # ------------------ Controller: D-Pad Fallback for Movement ------------------
+                hx, hy = event.value
+                if hx < 0:
+                    left_pressed = True
+                    new_x = offset[0] - 1
+                    if valid_position(tetromino, [new_x, offset[1]], grid):
+                        offset[0] = new_x
+                    last_horizontal_move = current_time
+                elif hx > 0:
+                    right_pressed = True
+                    new_x = offset[0] + 1
+                    if valid_position(tetromino, [new_x, offset[1]], grid):
+                        offset[0] = new_x
+                    last_horizontal_move = current_time
+                # D-Pad vertical for fast fall:
+                if hy < 0:
+                    fast_fall = True
+                elif hy >= 0:
+                    fast_fall = False
+
+    # =========================================================================
+    # Helper function: Process mouse events for UI elements (sound bar, buttons, etc.)
+    # =========================================================================
+    def process_mouse_events(events):
+        global game_command
+        for event in events:
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                # Only process events on the subwindow area.
                 if event.pos[0] >= SCREEN_WIDTH:
                     rel_x = event.pos[0] - SCREEN_WIDTH
                     rel_y = event.pos[1]
@@ -2063,10 +2124,9 @@ def run_game():
                         return
                     if settings.get('use_custom_music', False):
                         if skip_button_rect and skip_button_rect.collidepoint(rel_x, rel_y):
-                            skip_current_track()
-                    if menu_button_rect and menu_button_rect.collidepoint(rel_x, rel_y):
-                        game_command = "menu"
-                        return
+                            game_command = "skip"
+                        if menu_button_rect and menu_button_rect.collidepoint(rel_x, rel_y):
+                            game_command = "menu"
             elif event.type == pygame.MOUSEMOTION:
                 if event.buttons[0]:
                     if event.pos[0] >= SCREEN_WIDTH:
@@ -2074,94 +2134,22 @@ def run_game():
                         if sound_bar_rect and sound_bar_rect.collidepoint(rel_x, event.pos[1]):
                             new_volume = (rel_x - sound_bar_rect.x) / sound_bar_rect.width
                             pygame.mixer.music.set_volume(new_volume)
-    
-    # Drawing related stuff
-    def draw_game(shake_x, shake_y):
-        # Clear screen
-        screen.fill(BLACK)
-    
-        if not in_level_transition:
-            # First, draw all placed blocks from the grid
-            for y in range(GRID_HEIGHT):
-                for x in range(GRID_WIDTH):
-                    if grid[y][x]:
-                        draw_3d_block(screen, COLORS[grid[y][x] - 1],
-                                    x * BLOCK_SIZE + shake_x,
-                                    y * BLOCK_SIZE + shake_y,
-                                    BLOCK_SIZE)
-            # Then, draw the current falling tetromino
-            for cy, row in enumerate(tetromino):
-                for cx, cell in enumerate(row):
-                    if cell:
-                        draw_3d_block(screen, COLORS[color_index - 1],
-                                    (offset[0] + cx) * BLOCK_SIZE + shake_x,
-                                    (offset[1] + cy) * BLOCK_SIZE + shake_y,
-                                    BLOCK_SIZE)
-            # Now, overlay the grid (which is drawn using the updated opacity and thicker lines)
-            screen.blit(grid_surface, (shake_x, shake_y))
-            # Draw the ghost piece over the grid using the custom color options
-            if settings.get('ghost_piece', True):
-                draw_ghost_piece(tetromino, offset, grid, COLORS[color_index - 1])
-            # Draw explosions, trail particles, and dust particles
-            for explosion in explosion_particles:
-                explosion.draw(screen, (shake_x, shake_y))
-            for particle in trail_particles:
-                particle.draw(screen)
-            for particle in dust_particles:
-                particle.draw(screen)
-        else:
-            # In level transition, draw grid blocks with overlay
-            for y in range(GRID_HEIGHT):
-                for x in range(GRID_WIDTH):
-                    if grid[y][x]:
-                        draw_3d_block(screen, COLORS[grid[y][x] - 1],
-                                    x * BLOCK_SIZE + shake_x,
-                                    y * BLOCK_SIZE + shake_y,
-                                    BLOCK_SIZE)
-            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-            overlay.set_alpha(128)
-            overlay.fill(BLACK)
-            screen.blit(overlay, (0, 0))
-            level_text = tetris_font_large.render(f"LEVEL {level}", True, random.choice(COLORS))
-            level_shake_x = random.randint(-10, 10)
-            level_shake_y = random.randint(-10, 10)
-            screen.blit(level_text, (SCREEN_WIDTH//2 - level_text.get_width()//2 + level_shake_x,
-                                    SCREEN_HEIGHT//2 - level_text.get_height()//2 + level_shake_y))
-        # Draw subwindow with game info and update display
-        draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_total,
-                    is_tetris, tetris_last_flash, tetris_flash_time)
-        pygame.display.flip()
-    
-    # Particle Updater
-    def update_particles(wind_force):
-        # Update and remove trail particles
-        for particle in trail_particles[:]:
-            particle.update(wind_force, screen)
-            if particle.age >= particle.max_age:
-                trail_particles.remove(particle)
-        # Update and remove dust particles
-        for particle in dust_particles[:]:
-            particle.update()
-            if particle.age >= particle.max_age:
-                dust_particles.remove(particle)
-        # Update and remove explosion particles
-        for explosion in explosion_particles[:]:
-            explosion.update()
-            if explosion.lifetime <= 0:
-                explosion_particles.remove(explosion)
 
-# -------------------------- Continue Game Loop --------------------------
-
+    # =========================================================================
+    # Main Game Loop
+    # =========================================================================
     while True:
         current_time = pygame.time.get_ticks()
+
+        # ------------------------------ Screen Shake Effect ------------------------------
         shake_intensity = screen_shake * 2
         shake_x = random.randint(-shake_intensity, shake_intensity) if screen_shake > 0 else 0
         shake_y = random.randint(-shake_intensity, shake_intensity) if screen_shake > 0 else 0
 
+        # ------------------------------ Game Over Check ------------------------------
         if game_over:
             if heartbeat_playing and heartbeat_sound:
                 heartbeat_sound.stop()
-                heartbeat_playing = False
             if game_over_sound:
                 game_over_sound.play()
             if settings.get('use_custom_music', False):
@@ -2170,7 +2158,7 @@ def run_game():
             display_game_over(score)
             return
 
-        # --- Level Transition Handling ---
+        # ------------------------------ Level Transition Handling ------------------------------
         if in_level_transition:
             if current_time - transition_start_time > TRANSITION_DURATION:
                 in_level_transition = False
@@ -2189,19 +2177,27 @@ def run_game():
                     last_flash_time = current_time
                     flash_count += 1
 
-        # --- Process Events ---
-        handle_events(current_time)
-        
-        # Check if a button command was issued
+        # ------------------------------ Process All Events (Keyboard, Controller, Mouse) ------------------------------
+        events = pygame.event.get()  # Grab all events once per frame.
+        for event in events:
+            if event.type == pygame.QUIT:
+                save_settings(settings)
+                pygame.quit()
+                sys.exit()
+        process_keyboard_events(events, current_time)
+        process_controller_events(events, current_time)
+        process_mouse_events(events)
+
+        # Check for special commands (restart, return to menu, or skip track).
         if game_command == "restart" or game_command == "menu":
             return  # Exit run_game() to restart or return to the main menu.
         elif game_command == "skip":
             skip_current_track()   # Change the track.
-            game_command = None      # Reset the command so we don't repeatedly skip.
-            
-        # --- Poll Joypad for Continuous Movement ---
-        if joy is not None:
-            # Horizontal movement:
+            game_command = None      # Reset the command.
+
+        # ------------------------------ (Optional) Controller Analog Stick Processing ------------------------------
+        # If digital left/right are not bound on the controller, then use the analog stick.
+        if joy is not None and (cc.get('left') is None and cc.get('right') is None):
             axis0 = joy.get_axis(0)
             if abs(axis0) > 0.5 and current_time - last_joy_move > joy_delay:
                 if axis0 < 0:
@@ -2211,14 +2207,13 @@ def run_game():
                 if valid_position(tetromino, [new_x, offset[1]], grid):
                     offset[0] = new_x
                 last_joy_move = current_time
-            # Vertical axis for fast fall:
             axis1 = joy.get_axis(1)
             if axis1 > 0.5:
                 fast_fall = True
             else:
                 fast_fall = False
 
-        # --- Continuous Keyboard Movement ---
+        # ------------------------------ Process Continuous Movement (Held Buttons) ------------------------------
         if left_pressed or right_pressed:
             time_since_last_move = current_time - last_horizontal_move
             required_delay = fast_move_interval if time_since_last_move > move_interval else move_interval
@@ -2229,7 +2224,7 @@ def run_game():
                     offset[0] = new_x
                 last_horizontal_move = current_time
 
-        # --- Tetromino Falling ---
+        # ------------------------------ Tetromino Falling ------------------------------
         current_fall_speed = 50 if fast_fall else fall_speed
         if current_time - last_fall_time > current_fall_speed:
             if valid_position(tetromino, [offset[0], offset[1] + 1], grid):
@@ -2276,8 +2271,8 @@ def run_game():
                     next_tetromino = tetromino_bag.get_next_tetromino()
                     offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
             last_fall_time = current_time
-            
-        # Spawn flame trail particles when moving or fast falling.
+
+        # ------------------------------ Spawn Flame Trail Particles (Visual Effects) ------------------------------
         if flame_trails_enabled and (left_pressed or right_pressed or fast_fall):
             num_particles = random.randint(3, 5)
             spawn_offset = 15
@@ -2290,21 +2285,32 @@ def run_game():
                     direction = "right"
                     spawn_x = (offset[0] + len(tetromino[0])) * BLOCK_SIZE + random.randint(0, spawn_offset)
                     spawn_y = (offset[1] + random.uniform(0.2, 0.8) * len(tetromino)) * BLOCK_SIZE
-                else:  # For fast falling (vertical movement)
+                else:  # fast falling vertical movement
                     direction = "down"
-                spawn_x = (offset[0] + random.uniform(0.2, 0.8) * len(tetromino[0])) * BLOCK_SIZE
-                spawn_y = (offset[1] + len(tetromino)) * BLOCK_SIZE - spawn_offset
-            trail_particles.append(TrailParticle(spawn_x, spawn_y, direction))
+                    spawn_x = (offset[0] + random.uniform(0.2, 0.8) * len(tetromino[0])) * BLOCK_SIZE
+                    spawn_y = (offset[1] + len(tetromino)) * BLOCK_SIZE - spawn_offset
+                trail_particles.append(TrailParticle(spawn_x, spawn_y, direction))
 
-        # --- Update Particles ---
+        # ------------------------------ Update Particles (Trails, Dust, Explosions) ------------------------------
         wind_force = ((-4.0 if left_pressed else 4.0 if right_pressed else 0),
-                    (5.0 if fast_fall else 0))
-        update_particles(wind_force)
+                      (5.0 if fast_fall else 0))
+        for particle in trail_particles[:]:
+            particle.update(wind_force, screen)
+            if particle.age >= particle.max_age:
+                trail_particles.remove(particle)
+        for particle in dust_particles[:]:
+            particle.update()
+            if particle.age >= particle.max_age:
+                dust_particles.remove(particle)
+        for explosion in explosion_particles[:]:
+            explosion.update()
+            if explosion.lifetime <= 0:
+                explosion_particles.remove(explosion)
 
-        # --- Update Screen Shake ---
+        # ------------------------------ Update Screen Shake ------------------------------
         screen_shake = max(0, screen_shake - 1)
 
-        # --- Danger Zone (Heartbeat) ---
+        # ------------------------------ Danger Zone: Heartbeat Sound if Grid Almost Full ------------------------------
         if is_danger_zone_active(grid):
             if not heartbeat_playing and heartbeat_sound:
                 heartbeat_sound.play(-1)
@@ -2314,8 +2320,60 @@ def run_game():
                 heartbeat_sound.stop()
                 heartbeat_playing = False
 
-        # --- Draw Everything ---
-        draw_game(shake_x, shake_y)
+        # ------------------------------ Draw Everything on the Screen ------------------------------
+        # Clear the screen.
+        screen.fill(BLACK)
+        if not in_level_transition:
+            # Draw all placed blocks from the grid.
+            for y in range(GRID_HEIGHT):
+                for x in range(GRID_WIDTH):
+                    if grid[y][x]:
+                        draw_3d_block(screen, COLORS[grid[y][x] - 1],
+                                      x * BLOCK_SIZE + shake_x,
+                                      y * BLOCK_SIZE + shake_y,
+                                      BLOCK_SIZE)
+            # Draw the current falling tetromino.
+            for cy, row in enumerate(tetromino):
+                for cx, cell in enumerate(row):
+                    if cell:
+                        draw_3d_block(screen, COLORS[color_index - 1],
+                                      (offset[0] + cx) * BLOCK_SIZE + shake_x,
+                                      (offset[1] + cy) * BLOCK_SIZE + shake_y,
+                                      BLOCK_SIZE)
+            # Overlay the grid lines.
+            screen.blit(grid_surface, (shake_x, shake_y))
+            # Draw the ghost piece.
+            if settings.get('ghost_piece', True):
+                draw_ghost_piece(tetromino, offset, grid, COLORS[color_index - 1])
+            # Draw explosion effects and particles.
+            for explosion in explosion_particles:
+                explosion.draw(screen, (shake_x, shake_y))
+            for particle in trail_particles:
+                particle.draw(screen)
+            for particle in dust_particles:
+                particle.draw(screen)
+        else:
+            # During level transitions, draw the grid blocks with an overlay.
+            for y in range(GRID_HEIGHT):
+                for x in range(GRID_WIDTH):
+                    if grid[y][x]:
+                        draw_3d_block(screen, COLORS[grid[y][x] - 1],
+                                      x * BLOCK_SIZE + shake_x,
+                                      y * BLOCK_SIZE + shake_y,
+                                      BLOCK_SIZE)
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            overlay.set_alpha(128)
+            overlay.fill(BLACK)
+            screen.blit(overlay, (0, 0))
+            level_text = tetris_font_large.render(f"LEVEL {level}", True, random.choice(COLORS))
+            level_shake_x = random.randint(-10, 10)
+            level_shake_y = random.randint(-10, 10)
+            screen.blit(level_text, (SCREEN_WIDTH // 2 - level_text.get_width() // 2 + level_shake_x,
+                                     SCREEN_HEIGHT // 2 - level_text.get_height() // 2 + level_shake_y))
+        # Draw the subwindow with game info.
+        draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_total,
+                       is_tetris, tetris_last_flash, tetris_flash_time)
+        pygame.display.flip()
 
         clock.tick(60)
         
