@@ -2197,24 +2197,6 @@ def run_game():
             skip_current_track()   # Change the track.
             game_command = None      # Reset the command.
 
-        # ------------------------------ (Optional) Controller Analog Stick Processing ------------------------------
-        # If digital left/right are not bound on the controller, then use the analog stick.
-        if joy is not None and (cc.get('left') is None and cc.get('right') is None):
-            axis0 = joy.get_axis(0)
-            if abs(axis0) > 0.5 and current_time - last_joy_move > joy_delay:
-                if axis0 < 0:
-                    new_x = offset[0] - 1
-                else:
-                    new_x = offset[0] + 1
-                if valid_position(tetromino, [new_x, offset[1]], grid):
-                    offset[0] = new_x
-                last_joy_move = current_time
-            axis1 = joy.get_axis(1)
-            if axis1 > 0.5:
-                fast_fall = True
-            else:
-                fast_fall = False
-
         # ------------------------------ Process Continuous Movement (Held Buttons) ------------------------------
         if left_pressed or right_pressed:
             time_since_last_move = current_time - last_horizontal_move
