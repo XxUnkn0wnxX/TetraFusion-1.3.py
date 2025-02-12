@@ -2005,7 +2005,7 @@ def run_game():
     # Helper function: Process keyboard events using settings['controls']
     # =========================================================================
     def process_keyboard_events(events, current_time):
-        nonlocal left_pressed, right_pressed, fast_fall, offset, tetromino, last_horizontal_move
+        nonlocal left_pressed, right_pressed, offset, tetromino, last_horizontal_move
         nonlocal shape_index, color_index, score, level, next_tetromino, tetromino_bag
         global game_command, hold_used, hold_piece
         for event in events:
@@ -2023,8 +2023,8 @@ def run_game():
                     if valid_position(tetromino, [new_x, offset[1]], grid):
                         offset[0] = new_x
                     last_horizontal_move = current_time
-                elif event.key == controls['down']:
-                    fast_fall = True
+                # Do not handle the down arrow here; we'll use polling for fast fall.
+
                 # ------------------ Keyboard: Rotation, Hard Drop, and Hold ------------------
                 elif event.key == controls['rotate']:
                     rotated, new_offset = rotate_tetromino_with_kick(tetromino, offset, grid)
@@ -2055,15 +2055,14 @@ def run_game():
                     left_pressed = False
                 elif event.key == controls['right']:
                     right_pressed = False
-                elif event.key == controls['down']:
-                    fast_fall = False
+                # Do not handle the down arrow here; we'll use polling for fast fall.
 
     # =========================================================================
     # Helper function: Process controller events using settings['controller_controls']
     # =========================================================================
     def process_controller_events(events, current_time):
-        nonlocal left_pressed, right_pressed, fast_fall, offset, tetromino, last_horizontal_move
-        nonlocal shape_index, color_index, next_tetromino, tetromino_bag
+        nonlocal left_pressed, right_pressed, offset, tetromino, last_horizontal_move
+        nonlocal shape_index, color_index, next_tetromino, tetromino_bag, fast_fall
         global game_command, hold_used, hold_piece
         for event in events:
             if event.type == pygame.JOYBUTTONDOWN:
@@ -2081,7 +2080,7 @@ def run_game():
                         offset[0] = new_x
                     last_horizontal_move = current_time
                 elif cc.get('down') is not None and event.button == cc.get('down'):
-                    fast_fall = True
+                    fast_fall = True  # Set fast fall when button is pressed
                 elif cc.get('rotate') is not None and event.button == cc.get('rotate'):
                     rotated, new_offset = rotate_tetromino_with_kick(tetromino, offset, grid)
                     tetromino, offset = rotated, new_offset
@@ -2169,6 +2168,17 @@ def run_game():
     # =========================================================================
     while True:
         current_time = pygame.time.get_ticks()
+        
+        # ------------------------------ Fast Fall Polling ------------------------------
+        keys = pygame.key.get_pressed()
+        fast_fall_keyboard = keys[controls['down']]
+
+        fast_fall_controller = False
+        if cc.get('down') is not None and joy is not None:
+            if joy.get_button(cc['down']):  # Check if the down button is held
+                fast_fall_controller = True
+
+        fast_fall = fast_fall_keyboard or fast_fall_controller  # Enable fast fall if either input is active
 
         # ------------------------------ Screen Shake Effect ------------------------------
         shake_intensity = screen_shake * 2
