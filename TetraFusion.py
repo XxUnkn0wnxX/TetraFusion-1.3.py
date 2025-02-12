@@ -1718,6 +1718,25 @@ def run_game():
                     next_tetromino = tetromino_bag.get_next_tetromino()
                     offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
             last_fall_time = current_time
+            
+        # Spawn flame trail particles when moving or fast falling.
+        if flame_trails_enabled and (left_pressed or right_pressed or fast_fall):
+            num_particles = random.randint(3, 5)
+            spawn_offset = 15
+            for _ in range(num_particles):
+                if left_pressed:
+                    direction = "left"
+                    spawn_x = (offset[0] - 1) * BLOCK_SIZE + random.randint(-spawn_offset, 0)
+                    spawn_y = (offset[1] + random.uniform(0.2, 0.8) * len(tetromino)) * BLOCK_SIZE
+                elif right_pressed:
+                    direction = "right"
+                    spawn_x = (offset[0] + len(tetromino[0])) * BLOCK_SIZE + random.randint(0, spawn_offset)
+                    spawn_y = (offset[1] + random.uniform(0.2, 0.8) * len(tetromino)) * BLOCK_SIZE
+                else:  # For fast falling (vertical movement)
+                    direction = "down"
+                spawn_x = (offset[0] + random.uniform(0.2, 0.8) * len(tetromino[0])) * BLOCK_SIZE
+                spawn_y = (offset[1] + len(tetromino)) * BLOCK_SIZE - spawn_offset
+            trail_particles.append(TrailParticle(spawn_x, spawn_y, direction))
 
         # --- Update Particles ---
         wind_force = ((-4.0 if left_pressed else 4.0 if right_pressed else 0),
