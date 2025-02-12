@@ -830,24 +830,32 @@ def play_custom_music(settings):
         except Exception as e:
             print(f"Error loading default background music: {e}")
 
+def load_next_track(update_last_index=False):
+    global current_track_index, last_track_index
+    # Increment track index cyclically.
+    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+    try:
+        pygame.mixer.music.load(custom_music_playlist[current_track_index])
+        pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when the track ends.
+        pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
+        if update_last_index:
+            last_track_index = current_track_index
+    except Exception as e:
+        print(f"Error loading next track: {e}")
+
 def skip_current_track():
-    global custom_music_playlist, current_track_index, last_track_index, settings
     # If music is disabled, do nothing.
     if not settings.get('music_enabled', True):
         return
-
     if custom_music_playlist:
-        current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-        try:
-            pygame.mixer.music.load(custom_music_playlist[current_track_index])
-            pygame.mixer.music.play(0)
-            # Save the new track index so that future sessions or game over resumes remember it.
-            last_track_index = current_track_index
-        except Exception as e:
-            print(f"Error skipping to next track: {e}")
+        load_next_track(update_last_index=True)
 
 def stop_music():
     pygame.mixer.music.stop()
+    
+def handle_music_end_event():
+    if settings.get('use_custom_music', False) and custom_music_playlist:
+        load_next_track(update_last_index=False)
 
 # -------------------------- Menu System --------------------------
 def draw_main_menu(selected_index, menu_options):
@@ -903,16 +911,7 @@ def main_menu():
                 pygame.quit()
                 sys.exit()
             elif event.type == MUSIC_END_EVENT:
-                # If using custom music, cycle to the next track.
-                if settings.get('use_custom_music', False) and custom_music_playlist:
-                    global current_track_index
-                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-                    try:
-                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
-                        pygame.mixer.music.play(0) # Play once so MUSIC_END_EVENT fires when the track ends.
-                        pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
-                    except Exception as e:
-                        print(f"Error loading next track: {e}")
+                handle_music_end_event()
             # --- Keyboard Input ---
             elif event.type == pygame.KEYDOWN:
                 if event.key in (pygame.K_DOWN, pygame.K_s):
@@ -957,16 +956,9 @@ def main_menu():
                         sys.exit()
         # Fallback for Custom Music Looping:
         if settings.get('use_custom_music', False):
-            # Check if no music is playing and the fallback hasn't been triggered already
             if not pygame.mixer.music.get_busy() and not fallback_triggered:
-                fallback_triggered = True  # Mark that we've triggered fallback
-                current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-                try:
-                    pygame.mixer.music.load(custom_music_playlist[current_track_index])
-                    pygame.mixer.music.play(0)
-                    pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
-                except Exception as e:
-                    print(f"Error loading next track: {e}")
+                fallback_triggered = True  # Mark that fallback has been triggered.
+                load_next_track(update_last_index=False)
             elif pygame.mixer.music.get_busy():
                 # Reset the flag when music is playing normally.
                 fallback_triggered = False
@@ -1054,15 +1046,7 @@ def options_menu():
                 pygame.quit()
                 sys.exit()
             elif event.type == MUSIC_END_EVENT:
-                if settings.get('use_custom_music', False) and custom_music_playlist:
-                    global current_track_index
-                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-                    try:
-                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
-                        pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires again
-                        pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
-                    except Exception as e:
-                        print(f"Error loading next track: {e}")
+                handle_music_end_event()
             elif event.type == pygame.KEYDOWN:
                 # Only process Enter if it's not already pressed.
                 if event.key == pygame.K_RETURN and not enter_pressed:
@@ -1426,14 +1410,8 @@ def run_game():
                 pygame.quit()
                 sys.exit()
             elif event.type == MUSIC_END_EVENT:
-                if settings.get('use_custom_music', False) and custom_music_playlist:
-                    global current_track_index  # if current_track_index is global
-                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-                    try:
-                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
-                        pygame.mixer.music.play(0)
-                    except Exception as e:
-                        print(f"Error loading next track: {e}")
+                handle_music_end_event()
+
         # -- Keyboard Input ---
             elif event.type == pygame.KEYDOWN:
                 if event.key == controls['left']:
