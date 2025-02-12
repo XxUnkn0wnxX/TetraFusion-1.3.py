@@ -53,7 +53,7 @@ setup(
     options={
         "build_exe": {
             "include_files": include_files,
-            "includes": ["pygame"],  # Include necessary Python modules
+            "includes": ["pygame", "mutagen"],  # Include necessary Python modules
         },
         "bdist_msi": bdist_msi_options,
     },
