@@ -823,6 +823,7 @@ def draw_main_menu(selected_index, menu_options):
     pygame.display.flip()
 
 def main_menu():
+    global game_command
     # Start background music if enabled.
     if settings.get('music_enabled', True):
         if settings.get('use_custom_music', False):
@@ -843,6 +844,9 @@ def main_menu():
     selected_index = 0
     joy_delay = 150  # milliseconds delay for joystick hat input
     last_move = pygame.time.get_ticks()
+    
+    # Optional: a flag to prevent repeated fallback triggers
+    fallback_triggered = False
 
     while True:
         draw_main_menu(selected_index, menu_options)
@@ -858,7 +862,7 @@ def main_menu():
                     current_track_index = (current_track_index + 1) % len(custom_music_playlist)
                     try:
                         pygame.mixer.music.load(custom_music_playlist[current_track_index])
-                        pygame.mixer.music.play(0)
+                        pygame.mixer.music.play(0) # Play once so MUSIC_END_EVENT fires when the track ends.
                         pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
                     except Exception as e:
                         print(f"Error loading next track: {e}")
@@ -904,16 +908,28 @@ def main_menu():
                         save_settings(settings)
                         pygame.quit()
                         sys.exit()
-        # --- Fallback for custom music looping ---
-        if settings.get('use_custom_music', False) and not pygame.mixer.music.get_busy():
-            current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-            try:
-                pygame.mixer.music.load(custom_music_playlist[current_track_index])
-                pygame.mixer.music.play(0)
-                pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
-            except Exception as e:
-                print(f"Error loading next track: {e}")
-        clock.tick(30)
+        # Fallback for Custom Music Looping:
+        if settings.get('use_custom_music', False):
+            # Check if no music is playing and the fallback hasn't been triggered already
+            if not pygame.mixer.music.get_busy() and not fallback_triggered:
+                fallback_triggered = True  # Mark that we've triggered fallback
+                current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+                try:
+                    pygame.mixer.music.load(custom_music_playlist[current_track_index])
+                    pygame.mixer.music.play(0)
+                    pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
+                except Exception as e:
+                    print(f"Error loading next track: {e}")
+            elif pygame.mixer.music.get_busy():
+                # Reset the flag when music is playing normally.
+                fallback_triggered = False
+
+        # Additionally, you could handle the skip command:
+        if game_command == "skip":
+            skip_current_track()
+            game_command = None
+
+    clock.tick(30)
 
 def options_menu():
     global settings, last_track_index
