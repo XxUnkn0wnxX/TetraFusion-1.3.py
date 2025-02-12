@@ -1322,6 +1322,119 @@ def run_game():
         next_tetromino = tetromino_bag.get_next_tetromino()
         offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
         
+    def handle_events(current_time):
+        # Declare all run_game() local variables you'll modify:
+        nonlocal left_pressed, right_pressed, fast_fall, offset, tetromino, last_horizontal_move, shape_index, color_index, score, next_tetromino, tetris_last_flash
+        # Declare globals:
+        global hold_used, hold_piece, game_command
+        events = pygame.event.get()  # Get all events once for this frame.
+        for event in events:
+            if event.type == pygame.QUIT:
+                save_settings(settings)
+                pygame.quit()
+                sys.exit()
+            elif event.type == MUSIC_END_EVENT:
+                if settings.get('use_custom_music', False) and custom_music_playlist:
+                    global current_track_index  # if current_track_index is global
+                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+                    try:
+                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
+                        pygame.mixer.music.play(0)
+                    except Exception as e:
+                        print(f"Error loading next track: {e}")
+        # -- Keyboard Input ---
+            elif event.type == pygame.KEYDOWN:
+                if event.key == controls['left']:
+                    left_pressed = True
+                    new_x = offset[0] - 1
+                    if valid_position(tetromino, [new_x, offset[1]], grid):
+                        offset[0] = new_x
+                    last_horizontal_move = current_time
+                elif event.key == controls['right']:
+                    right_pressed = True
+                    new_x = offset[0] + 1
+                    if valid_position(tetromino, [new_x, offset[1]], grid):
+                        offset[0] = new_x
+                    last_horizontal_move = current_time
+                elif event.key == controls['down']:
+                    fast_fall = True
+                elif event.key == controls['rotate']:
+                    rotated, new_offset = rotate_tetromino_with_kick(tetromino, offset, grid)
+                    tetromino, offset = rotated, new_offset
+                elif event.key == controls.get('hold', pygame.K_c):
+                    if not hold_used:
+                        hold_used = True
+                        if hold_piece is None:
+                            hold_piece = copy.deepcopy(tetromino)
+                            tetromino = tetromino_bag.get_next_tetromino()
+                            shape_index = get_shape_index(tetromino) or 0
+                            color_index = (shape_index + level - 1) % len(COLORS) + 1
+                            offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
+                        else:
+                            tetromino, hold_piece = copy.deepcopy(hold_piece), copy.deepcopy(tetromino)
+                            shape_index = get_shape_index(tetromino) or 0
+                            color_index = (shape_index + level - 1) % len(COLORS) + 1
+                            offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
+                elif event.key == controls['pause']:
+                    pause_game()
+                elif event.key == controls['hard_drop']:
+                    lock_and_update_tetromino()
+            elif event.type == pygame.KEYUP:
+                if event.key == controls['left']:
+                    left_pressed = False
+                elif event.key == controls['right']:
+                    right_pressed = False
+                elif event.key == controls['down']:
+                    fast_fall = False
+            # --- Joystick Input ---
+            elif event.type == pygame.JOYBUTTONDOWN:
+                if event.button == 0:  # Rotate
+                    rotated, new_offset = rotate_tetromino_with_kick(tetromino, offset, grid)
+                    tetromino, offset = rotated, new_offset
+                elif event.button == 1:  # Hard drop
+                    lock_and_update_tetromino()
+                elif event.button == 2:  # Hold
+                    if not hold_used:
+                        hold_used = True
+                        if hold_piece is None:
+                            hold_piece = copy.deepcopy(tetromino)
+                            tetromino = tetromino_bag.get_next_tetromino()
+                        else:
+                            temp = copy.deepcopy(tetromino)
+                            tetromino = copy.deepcopy(hold_piece)
+                            hold_piece = temp
+                        offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
+                        shape_index = get_shape_index(tetromino) or 0
+                        color_index = (shape_index + level - 1) % len(COLORS) + 1
+                elif event.button == 7:  # Pause
+                    pause_game()
+            elif event.type == pygame.JOYHATMOTION:
+                pass
+            # --- Mouse Input ---
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.pos[0] >= SCREEN_WIDTH:
+                    rel_x = event.pos[0] - SCREEN_WIDTH
+                    rel_y = event.pos[1]
+                    if sound_bar_rect and sound_bar_rect.collidepoint(rel_x, rel_y):
+                        new_volume = (rel_x - sound_bar_rect.x) / sound_bar_rect.width
+                        pygame.mixer.music.set_volume(new_volume)
+                    if restart_button_rect and restart_button_rect.collidepoint(rel_x, rel_y):
+                        game_command = "restart"
+                        return
+                    if settings.get('use_custom_music', False):
+                        if skip_button_rect and skip_button_rect.collidepoint(rel_x, rel_y):
+                            skip_current_track()
+                    if menu_button_rect and menu_button_rect.collidepoint(rel_x, rel_y):
+                        game_command = "menu"
+                        return
+            elif event.type == pygame.MOUSEMOTION:
+                if event.buttons[0]:
+                    if event.pos[0] >= SCREEN_WIDTH:
+                        rel_x = event.pos[0] - SCREEN_WIDTH
+                        if sound_bar_rect and sound_bar_rect.collidepoint(rel_x, event.pos[1]):
+                            new_volume = (rel_x - sound_bar_rect.x) / sound_bar_rect.width
+                            pygame.mixer.music.set_volume(new_volume)
+
 # -------------------------- Continue Game Loop --------------------------
 
     while True:
@@ -1414,120 +1527,8 @@ def run_game():
         pygame.display.flip()
 
         # --- Event Handling ---
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type == MUSIC_END_EVENT:
-                if settings.get('use_custom_music', False) and custom_music_playlist:
-                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-                    try:
-                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
-                        pygame.mixer.music.play(0)
-                    except Exception as e:
-                        print(f"Error loading next track: {e}")
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.pos[0] >= SCREEN_WIDTH:
-                    rel_x = event.pos[0] - SCREEN_WIDTH
-                    rel_y = event.pos[1]
-                    if sound_bar_rect and sound_bar_rect.collidepoint(rel_x, rel_y):
-                        new_volume = (rel_x - sound_bar_rect.x) / sound_bar_rect.width
-                        pygame.mixer.music.set_volume(new_volume)
-                    if restart_button_rect and restart_button_rect.collidepoint(rel_x, rel_y):
-                        game_command = "restart"
-                        return
-                    if settings.get('use_custom_music', False):
-                        if skip_button_rect and skip_button_rect.collidepoint(rel_x, rel_y):
-                            skip_current_track()
-                    if menu_button_rect and menu_button_rect.collidepoint(rel_x, rel_y):
-                        game_command = "menu"
-                        return
-            elif event.type == pygame.MOUSEMOTION:
-                if event.buttons[0]:
-                    if event.pos[0] >= SCREEN_WIDTH:
-                        rel_x = event.pos[0] - SCREEN_WIDTH
-                        if sound_bar_rect and sound_bar_rect.collidepoint(rel_x, event.pos[1]):
-                            new_volume = (rel_x - sound_bar_rect.x) / sound_bar_rect.width
-                            pygame.mixer.music.set_volume(new_volume)
-            elif event.type == pygame.KEYDOWN:
-                if event.key == controls['left']:
-                    left_pressed = True
-                    new_x = offset[0] - 1
-                    if valid_position(tetromino, [new_x, offset[1]], grid):
-                        offset[0] = new_x
-                    last_horizontal_move = current_time
-                elif event.key == controls['right']:
-                    right_pressed = True
-                    new_x = offset[0] + 1
-                    if valid_position(tetromino, [new_x, offset[1]], grid):
-                        offset[0] = new_x
-                    last_horizontal_move = current_time
-                elif event.key == controls['down']:
-                    fast_fall = True
-                elif event.key == controls['rotate']:
-                    rotated, new_offset = rotate_tetromino_with_kick(tetromino, offset, grid)
-                    tetromino, offset = rotated, new_offset
-                elif event.key == controls.get('hold', pygame.K_c):
-                    if not hold_used:
-                        hold_used = True
-                        if hold_piece is None:
-                            hold_piece = copy.deepcopy(tetromino)
-                            tetromino = tetromino_bag.get_next_tetromino()
-                            shape_index = get_shape_index(tetromino)
-                            if shape_index is None:
-                                shape_index = 0
-                            color_index = (shape_index + level - 1) % len(COLORS) + 1
-                            offset = [GRID_WIDTH//2 - len(tetromino[0])//2, 0]
-                        else:
-                            tetromino, hold_piece = copy.deepcopy(hold_piece), copy.deepcopy(tetromino)
-                            shape_index = get_shape_index(tetromino)
-                            if shape_index is None:
-                                shape_index = 0
-                            color_index = (shape_index + level - 1) % len(COLORS) + 1
-                            offset = [GRID_WIDTH//2 - len(tetromino[0])//2, 0]
-                elif event.key == controls['pause']:
-                    pause_game()
-                # uses new tetromino sub-function 
-                elif event.key == controls['hard_drop']:
-                    lock_and_update_tetromino()
-            elif event.type == pygame.KEYUP:
-                if event.key == controls['left']:
-                    left_pressed = False
-                elif event.key == controls['right']:
-                    right_pressed = False
-                elif event.key == controls['down']:
-                    fast_fall = False
-            # --- Joypad Input Handling (events) ---
-            elif event.type == pygame.JOYBUTTONDOWN:
-                # Map joypad buttons:
-                # Button 0: Rotate; Button 1: Hard Drop; Button 2: Hold; Button 7: Pause.
-                if event.button == 0:
-                    rotated, new_offset = rotate_tetromino_with_kick(tetromino, offset, grid)
-                    tetromino, offset = rotated, new_offset
-                # uses new tetromino sub-function
-                elif event.button == 1:
-                    lock_and_update_tetromino()
-                elif event.button == 2:
-                    if not hold_used:
-                        hold_used = True
-                        if hold_piece is None:
-                            hold_piece = copy.deepcopy(tetromino)
-                            tetromino = tetromino_bag.get_next_tetromino()
-                        else:
-                            temp = copy.deepcopy(tetromino)
-                            tetromino = copy.deepcopy(hold_piece)
-                            hold_piece = temp
-                        offset = [GRID_WIDTH//2 - len(tetromino[0])//2, 0]
-                        shape_index = get_shape_index(tetromino) or 0
-                        color_index = (shape_index + level - 1) % len(COLORS) + 1
-                elif event.button == 7:
-                    pause_game()
-            # End event processing.
-
-            elif event.type == pygame.JOYAXISMOTION or event.type == pygame.JOYHATMOTION:
-                # We will handle continuous joypad input by polling below.
-                pass
+        # Call the consolidated input handling function
+        handle_events(current_time)
 
         # --- Poll Joypad for Continuous Movement ---
         if joy is not None:
