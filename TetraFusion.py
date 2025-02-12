@@ -46,39 +46,84 @@ def get_music_files(directory):
     """
     Recursively search the given directory for valid audio files.
     Uses both file extension checking and Mutagen to ensure the file is playable.
-    Returns a sorted list of valid file paths.
+    The search order is as follows:
+      1. Process files in the current directory first. Within the directory, files are sorted so that
+         filenames starting with digits (0-9) come first, then those starting with English letters (A-Z),
+         then all other files.
+      2. Then process each subdirectory (in sorted order using the same criteria), appending their files.
+    Returns a list of valid file paths in the order they are found.
     """
     music_files = []
     unsupported_files = []
+    
+    try:
+        items = os.listdir(directory)
+    except Exception as e:
+        print(f"Error reading directory {directory}: {e}")
+        return []
 
-    for root, dirs, files in os.walk(directory):
-        for item in files:
-            if item.startswith('.'):
-                continue  # Ignore hidden files
-            full_path = os.path.join(root, item)
-            ext = os.path.splitext(full_path)[1].lower()
-            
-            # Check if file extension is a known audio format
-            if ext in AUDIO_EXTENSIONS:
-                try:
-                    # Verify the file with Mutagen (checks actual audio header)
-                    if File(full_path) is not None:
-                        music_files.append(full_path)
-                    else:
-                        unsupported_files.append(item)
-                except Exception as e:
-                    print(f"Skipping {item}: Error reading file - {e}")
-                    unsupported_files.append(item)
-            else:
-                unsupported_files.append(item)
-
+    # Separate items into files and subdirectories, ignoring hidden items.
+    files = []
+    subdirs = []
+    for item in items:
+        if item.startswith('.'):
+            continue  # Skip hidden files/directories.
+        full_path = os.path.join(directory, item)
+        if os.path.isfile(full_path):
+            files.append(item)
+        elif os.path.isdir(full_path):
+            subdirs.append(item)
+    
+    # Define a key function for sorting:
+    # Category 0: Files starting with a digit (0-9)
+    # Category 1: Files starting with an English letter (A-Z)
+    # Category 2: All others (e.g., non-English characters, symbols)
+    def sort_key(name):
+        first_char = name[0]
+        if first_char.isdigit():
+            cat = 0
+        elif "A" <= first_char.upper() <= "Z":
+            cat = 1
+        else:
+            cat = 2
+        return (cat, name.upper())
+    
+    # Sort the files and subdirectories using the key.
+    files.sort(key=sort_key)
+    subdirs.sort(key=sort_key)
+    
+    # Process files in the current directory.
+    for file in files:
+        full_path = os.path.join(directory, file)
+        ext = os.path.splitext(full_path)[1].lower()
+        # Check if file extension is a known audio format.
+        if ext in AUDIO_EXTENSIONS:
+            try:
+                # Verify the file with Mutagen (checks actual audio header)
+                if File(full_path) is not None:
+                    music_files.append(full_path)
+                else:
+                    unsupported_files.append(file)
+            except Exception as e:
+                print(f"Skipping {file}: Error reading file - {e}")
+                unsupported_files.append(file)
+        else:
+            unsupported_files.append(file)
+    
+    # Process each subdirectory recursively.
+    for sub in subdirs:
+        sub_path = os.path.join(directory, sub)
+        # Append files from the subdirectory after processing the current directory.
+        music_files.extend(get_music_files(sub_path))
+    
+    # Print unsupported files (if any) along with supported formats.
     if unsupported_files:
-        print("Unsupported files detected:")
+        print(f"Unsupported files detected in '{directory}':")
         for file in unsupported_files:
             print(f"  {file}")
-        print("Supported formats:", ", ".join(AUDIO_EXTENSIONS))
-
-    return sorted(music_files)
+        print("Supported formats are:", ", ".join(sorted(AUDIO_EXTENSIONS)))
+    
+    return music_files
 
 def update_custom_music_playlist(settings):
     """Updates the custom music playlist based on user settings."""
@@ -770,6 +815,7 @@ def play_custom_music(settings):
         pygame.mixer.music.stop()
         try:
             pygame.mixer.music.load(track)
+            pygame.mixer.music.set_volume(1.0)  # Set volume to 100%
             pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when the track ends.
             pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
         except Exception as e:
@@ -779,6 +825,7 @@ def play_custom_music(settings):
         print("No music files found in the selected directory; loading default background music.")
         try:
             pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+            pygame.mixer.music.set_volume(1.0)  # Set volume to 100%
             pygame.mixer.music.play(-1)
         except Exception as e:
             print(f"Error loading default background music: {e}")
@@ -834,6 +881,7 @@ def main_menu():
             if not pygame.mixer.music.get_busy():
                 try:
                     pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                    pygame.mixer.music.set_volume(1.0)  # Set volume to 100%
                     pygame.mixer.music.play(-1)  # Loop indefinitely
                 except Exception as e:
                     print(f"Error loading default background music: {e}")
