@@ -1,4 +1,4 @@
-# Game Ver 1.9.2 #BETA_TEST
+# Game Ver 1.9.2
 # Dependencies: pip install mutagen
 
 import pygame
@@ -16,6 +16,8 @@ import copy  # Needed for deepcopy
 pygame.init()
 pygame.mixer.set_num_channels(32)
 pygame.mixer.init()
+
+GAME_CAPTION = "TetraFusion 1.9.2"  # Moved to top
 
 last_track_index = None  # Stores the current track index at game over.
 
@@ -42,42 +44,86 @@ def load_sound(file_path):
 
 def get_music_files(directory):
     """
-    Search the given directory (non-recursively) for valid audio files.
+    Recursively search the given directory for valid audio files.
     Uses both file extension checking and Mutagen to ensure the file is playable.
-    Returns a sorted list of valid file paths.
+    The search order is as follows:
+      1. Process files in the current directory first. Within the directory, files are sorted so that
+         filenames starting with digits (0-9) come first, then those starting with English letters (A-Z),
+         then all other files.
+      2. Then process each subdirectory (in sorted order using the same criteria), appending their files.
+    Returns a list of valid file paths in the order they are found.
     """
     music_files = []
     unsupported_files = []
+    
+    try:
+        items = os.listdir(directory)
+    except Exception as e:
+        print(f"Error reading directory {directory}: {e}")
+        return []
 
-    for item in os.listdir(directory):
+    # Separate items into files and subdirectories, ignoring hidden items.
+    files = []
+    subdirs = []
+    for item in items:
         if item.startswith('.'):
-            continue  # Ignore hidden files
+            continue  # Skip hidden files/directories.
         full_path = os.path.join(directory, item)
-
         if os.path.isfile(full_path):
-            ext = os.path.splitext(full_path)[1].lower()
-            
-            # Check if file extension is a known audio format
-            if ext in AUDIO_EXTENSIONS:
-                try:
-                    # Verify the file with Mutagen (checks actual audio header)
-                    if File(full_path) is not None:
-                        music_files.append(full_path)
-                    else:
-                        unsupported_files.append(item)
-                except Exception as e:
-                    print(f"Skipping {item}: Error reading file - {e}")
-                    unsupported_files.append(item)
-            else:
-                unsupported_files.append(item)
-
+            files.append(item)
+        elif os.path.isdir(full_path):
+            subdirs.append(item)
+    
+    # Define a key function for sorting:
+    # Category 0: Files starting with a digit (0-9)
+    # Category 1: Files starting with an English letter (A-Z)
+    # Category 2: All others (e.g., non-English characters, symbols)
+    def sort_key(name):
+        first_char = name[0]
+        if first_char.isdigit():
+            cat = 0
+        elif "A" <= first_char.upper() <= "Z":
+            cat = 1
+        else:
+            cat = 2
+        return (cat, name.upper())
+    
+    # Sort the files and subdirectories using the key.
+    files.sort(key=sort_key)
+    subdirs.sort(key=sort_key)
+    
+    # Process files in the current directory.
+    for file in files:
+        full_path = os.path.join(directory, file)
+        ext = os.path.splitext(full_path)[1].lower()
+        # Check if file extension is a known audio format.
+        if ext in AUDIO_EXTENSIONS:
+            try:
+                # Verify the file with Mutagen (checks actual audio header)
+                if File(full_path) is not None:
+                    music_files.append(full_path)
+                else:
+                    unsupported_files.append(file)
+            except Exception as e:
+                print(f"Skipping {file}: Error reading file - {e}")
+                unsupported_files.append(file)
+        else:
+            unsupported_files.append(file)
+    
+    # Process each subdirectory recursively.
+    for sub in subdirs:
+        sub_path = os.path.join(directory, sub)
+        # Append files from the subdirectory after processing the current directory.
+        music_files.extend(get_music_files(sub_path))
+    
+    # Print unsupported files (if any) along with supported formats.
     if unsupported_files:
-        print("Unsupported files detected:")
+        print(f"Unsupported files detected in '{directory}':")
         for file in unsupported_files:
             print(f"  {file}")
-        print("Supported formats:", ", ".join(AUDIO_EXTENSIONS))
-
-    return sorted(music_files)
+        print("Supported formats are:", ", ".join(sorted(AUDIO_EXTENSIONS)))
+    
+    return music_files
 
 def update_custom_music_playlist(settings):
     """Updates the custom music playlist based on user settings."""
@@ -120,7 +166,7 @@ def update_custom_music_playlist(settings):
 
 if sys.platform == "darwin":
     try:
-        from AppKit import NSOpenPanel
+        from AppKit import NSOpenPanel, NSApplication
     except ImportError:
         NSOpenPanel = None
 
@@ -137,7 +183,10 @@ if sys.platform == "darwin":
         panel.setCanChooseFiles_(False)
         panel.setCanChooseDirectories_(True)
         panel.setAllowsMultipleSelection_(False)
-        if panel.runModal() == 1:
+        result = panel.runModal()
+        # Restore focus to the game window.
+        NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+        if result == 1:
             # panel.URL() returns an NSURL; we need its path.
             return panel.URL().path()
         return ""
@@ -223,13 +272,14 @@ try:
     tetris_font_large = pygame.font.Font(TETRIS_FONT_PATH, 40)
     tetris_font_medium = pygame.font.Font(TETRIS_FONT_PATH, 27)
     tetris_font_small = pygame.font.Font(TETRIS_FONT_PATH, 18)
-    tetris_font_tiny = pygame.font.Font(TETRIS_FONT_PATH, 16)
+    tetris_font_smaller = pygame.font.Font(TETRIS_FONT_PATH, 16)
+    tetris_font_tiny = pygame.font.Font(TETRIS_FONT_PATH, 14)
 except FileNotFoundError:
     print(f"Font file not found: {TETRIS_FONT_PATH}")
     sys.exit()
 
 screen = pygame.display.set_mode((SCREEN_WIDTH + SUBWINDOW_WIDTH, SCREEN_HEIGHT))
-pygame.display.set_caption("TetraFusion 1.9.2")
+pygame.display.set_caption(GAME_CAPTION)
 clock = pygame.time.Clock()
 
 subwindow_visible = True
@@ -254,12 +304,29 @@ def load_settings(filename="settings.json"):
             "rotate": pygame.K_UP,
             "pause": pygame.K_p,
             "hard_drop": pygame.K_SPACE,
-            "hold": pygame.K_c
+            "hold": pygame.K_c,
+            "skip_track": pygame.K_x
         },
+        "controller_controls": {
+            "left": None,
+            "right": None,
+            "down": None,
+            "rotate": None,
+            "hard_drop": None,
+            "hold": None,
+            "pause": None,
+            "skip_track": None
+        },
+        "controller_menu_navigation": {
+        "up": None,
+        "down": None,
+        "select": None,
+        "back": None
+    },
         "difficulty": "normal",
         "flame_trails": True,
         "grid_color": [200, 200, 200],
-        "grid_opacity": 128,
+        "grid_opacity": 255,
         "grid_lines": True,
         "ghost_piece": True,
         "music_enabled": True,
@@ -268,34 +335,37 @@ def load_settings(filename="settings.json"):
     }
 
     if not os.path.exists(filename):
-        save_settings(default_settings, filename) # save defaults to file if no file exists
-        return default_settings  # Return defaults if no file exists
+        save_settings(default_settings, filename)  # Save defaults if no file exists.
+        return default_settings
 
     try:
         with open(filename, "r") as file:
             saved_settings = json.load(file)
 
-        # Ensure all required keys exist in the loaded settings
+        # Ensure required keys exist:
         saved_settings.setdefault("controls", {})
-        
-        # Convert string keys back to pygame key constants
+        saved_settings.setdefault("controller_controls", default_settings["controller_controls"])
+        saved_settings.setdefault("controller_menu_navigation", default_settings["controller_menu_navigation"])
+
+        # Convert string keys back to pygame key constants for controls.
         for key, default_value in default_settings["controls"].items():
             if key in saved_settings["controls"]:
                 val = saved_settings["controls"][key]
-                if isinstance(val, str):  # Convert string keys to pygame key constants
+                if isinstance(val, str):  # Convert string to key constant.
                     try:
-                        saved_settings["controls"][key] = pygame.key.key_code(val.lower())  
+                        saved_settings["controls"][key] = pygame.key.key_code(val.lower())
                     except KeyError:
                         print(f"Warning: Unrecognized key '{val}' in settings. Resetting to default.")
                         saved_settings["controls"][key] = default_value
-                elif not isinstance(val, int):  # If invalid, reset to default
+                elif not isinstance(val, int):  # If invalid, reset.
                     saved_settings["controls"][key] = default_value
             else:
-                saved_settings["controls"][key] = default_value  # Add missing keys
+                saved_settings["controls"][key] = default_value
 
+        # Ensure every key from default_settings exists in saved_settings.
         for key, default_value in default_settings.items():
             if key not in saved_settings:
-                saved_settings[key] = default_value  # Add missing settings
+                saved_settings[key] = default_value
 
         return saved_settings
 
@@ -309,10 +379,12 @@ def save_settings(settings, filename="settings.json"):
     try:
         settings_to_save = {
             "controls": {control: pygame.key.name(key).upper() for control, key in settings["controls"].items()},
+            "controller_controls": {control: settings["controller_controls"].get(control) for control in settings.get("controller_controls", {})},
+            "controller_menu_navigation": {control: settings["controller_menu_navigation"].get(control) for control in settings.get("controller_menu_navigation", {})},
             "difficulty": settings.get("difficulty", "normal"),
             "flame_trails": settings.get("flame_trails", True),
             "grid_color": settings.get("grid_color", [200, 200, 200]),
-            "grid_opacity": settings.get("grid_opacity", 128),
+            "grid_opacity": settings.get("grid_opacity", 255),
             "grid_lines": settings.get("grid_lines", True),
             "ghost_piece": settings.get("ghost_piece", True),
             "music_enabled": settings.get("music_enabled", True),
@@ -486,17 +558,19 @@ def draw_3d_block(screen, color, x, y, block_size):
     pygame.draw.polygon(screen, outline_color, left_polygon, 2)
     pygame.draw.polygon(screen, outline_color, right_polygon, 2)
 
+# ---------- FIXED draw_3d_grid (using full opacity value and thicker lines) ----------
 def draw_3d_grid(grid_surface, grid_color, grid_opacity):
     if not settings.get('grid_lines', True):
-        grid_surface.fill((0,0,0,0))
+        grid_surface.fill((0, 0, 0, 0))
         return
     grid_surface.fill((0, 0, 0, 0))
-    factor = grid_opacity / 192.0
-    line_color = tuple(int(grid_color[i]*factor) for i in range(3))
+    alpha_color = (grid_color[0], grid_color[1], grid_color[2], grid_opacity)
+    thickness = 2  # Thicker grid lines
     for x in range(0, SCREEN_WIDTH, BLOCK_SIZE):
-        pygame.draw.line(grid_surface, line_color, (x,0), (x,SCREEN_HEIGHT), 1)
+        pygame.draw.line(grid_surface, alpha_color, (x, 0), (x, SCREEN_HEIGHT), thickness)
     for y in range(0, SCREEN_HEIGHT, BLOCK_SIZE):
-        pygame.draw.line(grid_surface, line_color, (0,y), (SCREEN_WIDTH,y), 1)
+        pygame.draw.line(grid_surface, alpha_color, (0, y), (SCREEN_WIDTH, y), thickness)
+    pygame.draw.line(grid_surface, alpha_color, (SCREEN_WIDTH - 1, 0), (SCREEN_WIDTH - 1, SCREEN_HEIGHT), thickness)
 
 def load_high_score(filename="high_score.txt"):
     try:
@@ -535,7 +609,7 @@ def valid_position(tetromino, offset, grid):
             if cell:
                 x = offset[0] + cx
                 y = offset[1] + cy
-                if x < 0 or x >= GRID_WIDTH or y >= GRID_HEIGHT or (y>=0 and grid[y][x]):
+                if x < 0 or x >= GRID_WIDTH or y >= GRID_HEIGHT or (y >= 0 and grid[y][x]):
                     return False
     return True
 
@@ -551,7 +625,7 @@ def rotate_tetromino_with_kick(tetromino, offset, grid):
 def clear_lines(grid):
     full_lines = [y for y in range(GRID_HEIGHT) if all(grid[y])]
     if full_lines:
-        if len(full_lines)==4 and multiple_line_clear_sound:
+        if len(full_lines) == 4 and multiple_line_clear_sound:
             multiple_line_clear_sound.play()
         elif line_clear_sound:
             line_clear_sound.play()
@@ -667,7 +741,7 @@ def draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_t
             restart_button_rect.x + (restart_button_rect.width - restart_text.get_width()) // 2,
             restart_button_rect.y + (restart_button_rect.height - restart_text.get_height()) // 2))
         pygame.draw.rect(subwindow, (200, 200, 50), skip_button_rect)
-        skip_text = tetris_font_tiny.render("Skip Track", True, WHITE)
+        skip_text = tetris_font_smaller.render("Skip Track", True, WHITE)
         subwindow.blit(skip_text, (
             skip_button_rect.x + (skip_button_rect.width - skip_text.get_width()) // 2,
             skip_button_rect.y + (skip_button_rect.height - skip_text.get_height()) // 2))
@@ -694,9 +768,8 @@ def draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_t
     
     screen.blit(subwindow, (SCREEN_WIDTH, 0))
 
-# -------------------------- Ghost Piece --------------------------
-def draw_ghost_piece(tetromino, offset, grid):
-    # Only draw the ghost piece if enabled in settings.
+# ---------- Updated Ghost Piece with Color Option ----------
+def draw_ghost_piece(tetromino, offset, grid, color):
     if not settings.get('ghost_piece', True):
         return
 
@@ -705,20 +778,18 @@ def draw_ghost_piece(tetromino, offset, grid):
     while valid_position(tetromino, [offset[0], ghost_y + 1], grid):
         ghost_y += 1
     ghost_offset = [offset[0], ghost_y]
-
-    # Set opacity: 10% opaque
-    ghost_fill_alpha = int(255 * 0.1)      # (adjust as needed)
-    ghost_outline_alpha = int(255 * 0.1)     # (adjust as needed)
-
-    # Draw the entire ghost tetromino at its landing position.
+    ghost_fill_alpha = int(255 * 0.2)   # 20% opacity fill
+    ghost_outline_alpha = int(255 * 0.4)  # 40% opacity outline
+    border_thickness = 2
     for cy, row in enumerate(tetromino):
         for cx, cell in enumerate(row):
             if cell:
                 x = (ghost_offset[0] + cx) * BLOCK_SIZE
                 y = (ghost_offset[1] + cy) * BLOCK_SIZE
                 ghost_block = pygame.Surface((BLOCK_SIZE, BLOCK_SIZE), pygame.SRCALPHA)
-                ghost_block.fill((200, 200, 200, ghost_fill_alpha))
-                pygame.draw.rect(ghost_block, (255, 255, 255, ghost_outline_alpha), (0, 0, BLOCK_SIZE, BLOCK_SIZE), 2)
+                ghost_block.fill((color[0], color[1], color[2], ghost_fill_alpha))
+                pygame.draw.rect(ghost_block, (color[0], color[1], color[2], ghost_outline_alpha),
+                                 (0, 0, BLOCK_SIZE, BLOCK_SIZE), border_thickness)
                 screen.blit(ghost_block, (x, y))
 
     # Overlay the shadow on supported cells.
@@ -751,7 +822,6 @@ def draw_shadow_reflection(tetromino, ghost_offset, grid):
                     screen.blit(shadow_block, (x, y))
 
 # -------------------------- Custom Music Functions --------------------------
-
 def play_custom_music(settings):
     global custom_music_playlist, current_track_index, last_track_index
     if not settings.get('music_enabled', True):
@@ -760,8 +830,7 @@ def play_custom_music(settings):
 
     update_custom_music_playlist(settings)
     
-    # If custom music is enabled and we have a previously saved track index,
-    # restore it. Otherwise, start at index 0.
+    # Restore a previously saved track index if applicable; otherwise, start at 0.
     if settings.get('use_custom_music', False) and last_track_index is not None and last_track_index < len(custom_music_playlist):
         current_track_index = last_track_index
     else:
@@ -772,7 +841,8 @@ def play_custom_music(settings):
         pygame.mixer.music.stop()
         try:
             pygame.mixer.music.load(track)
-            pygame.mixer.music.play(0)  # Play once so that MUSIC_END_EVENT fires when the track ends.
+            pygame.mixer.music.set_volume(1.0)  # Set volume to 100%
+            pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when the track ends.
             pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
         except Exception as e:
             print(f"Error playing custom music: {e}")
@@ -781,77 +851,166 @@ def play_custom_music(settings):
         print("No music files found in the selected directory; loading default background music.")
         try:
             pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+            pygame.mixer.music.set_volume(1.0)  # Set volume to 100%
             pygame.mixer.music.play(-1)
         except Exception as e:
             print(f"Error loading default background music: {e}")
 
+def load_next_track(update_last_index=False):
+    global current_track_index, last_track_index
+    # Increment track index cyclically.
+    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+    try:
+        pygame.mixer.music.load(custom_music_playlist[current_track_index])
+        pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when the track ends.
+        pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
+        if update_last_index:
+            last_track_index = current_track_index
+    except Exception as e:
+        print(f"Error loading next track: {e}")
+
+def skip_current_track():
+    # If music is disabled, do nothing.
+    if not settings.get('music_enabled', True):
+        return
+    if custom_music_playlist:
+        load_next_track(update_last_index=True)
+
+def stop_music():
+    pygame.mixer.music.stop()
+    
+def handle_music_end_event():
+    if settings.get('use_custom_music', False) and custom_music_playlist:
+        load_next_track(update_last_index=False)
+
 # -------------------------- Menu System --------------------------
-def draw_main_menu():
+def draw_main_menu(selected_index, menu_options):
+    """
+    Draws the main menu screen with a title and a list of selectable options.
+    The option at index 'selected_index' is highlighted.
+    """
     screen.fill(BLACK)
     title_text = tetris_font_large.render("TetraFusion", True, random.choice(COLORS))
-    start_text = tetris_font_medium.render("Press ENTER to Start", True, WHITE)
-    options_text = tetris_font_medium.render("Press O for Options", True, WHITE)
-    exit_text = tetris_font_medium.render("Press ESC to Quit", True, WHITE)
-    screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, SCREEN_HEIGHT//3))
-    screen.blit(start_text, (SCREEN_WIDTH//2 - start_text.get_width()//2, SCREEN_HEIGHT//2))
-    screen.blit(options_text, (SCREEN_WIDTH//2 - options_text.get_width()//2, SCREEN_HEIGHT//2+50))
-    screen.blit(exit_text, (SCREEN_WIDTH//2 - exit_text.get_width()//2, SCREEN_HEIGHT//2+100))
+    # Draw title above the menu options.
+    screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, SCREEN_HEIGHT//3 - 100))
+    # Draw each menu option.
+    for i, option in enumerate(menu_options):
+        color = RED if i == selected_index else WHITE
+        option_text = tetris_font_medium.render(option, True, color)
+        x = SCREEN_WIDTH//2 - option_text.get_width()//2
+        y = SCREEN_HEIGHT//2 + i * 50
+        screen.blit(option_text, (x, y))
     pygame.display.flip()
 
 def main_menu():
-    # Ensure music is started when entering the main menu.
+    global game_command
+    # Start background music if enabled.
     if settings.get('music_enabled', True):
         if settings.get('use_custom_music', False):
+            # If custom music is enabled, start it if not already playing.
             if not pygame.mixer.music.get_busy():
                 play_custom_music(settings)
         else:
+            # Otherwise, load and loop the default background music.
             if not pygame.mixer.music.get_busy():
                 try:
                     pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                    pygame.mixer.music.set_volume(1.0)  # Set volume to 100%
                     pygame.mixer.music.play(-1)  # Loop indefinitely
                 except Exception as e:
                     print(f"Error loading default background music: {e}")
+                    
+    # Define the menu options.
+    menu_options = ["Start", "Options", "Quit"]
+    selected_index = 0
+    joy_delay = 150  # milliseconds delay for joystick hat input
+    last_move = pygame.time.get_ticks()
+    
+    # Optional: a flag to prevent repeated fallback triggers
+    fallback_triggered = False
 
     while True:
-        draw_main_menu()
+        draw_main_menu(selected_index, menu_options)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 save_settings(settings)
                 pygame.quit()
                 sys.exit()
             elif event.type == MUSIC_END_EVENT:
-                # If using custom music, cycle to the next track.
-                if settings.get('use_custom_music', False) and custom_music_playlist:
-                    global current_track_index
-                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-                    try:
-                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
-                        pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when track ends
-                    except Exception as e:
-                        print(f"Error loading next track: {e}")
+                handle_music_end_event()
+            # --- Keyboard Input ---
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:
-                    return
+                if event.key in (pygame.K_DOWN, pygame.K_s):
+                    selected_index = (selected_index + 1) % len(menu_options)
+                elif event.key in (pygame.K_UP, pygame.K_w):
+                    selected_index = (selected_index - 1) % len(menu_options)
+                elif event.key == pygame.K_RETURN:
+                    if menu_options[selected_index] == "Start":
+                        return  # Exit menu and start game
+                    elif menu_options[selected_index] == "Options":
+                        options_menu()
+                    elif menu_options[selected_index] == "Quit":
+                        save_settings(settings)
+                        pygame.quit()
+                        sys.exit()
                 elif event.key == pygame.K_o:
                     options_menu()
                 elif event.key == pygame.K_ESCAPE:
                     save_settings(settings)
                     pygame.quit()
                     sys.exit()
+            # --- Controller Navigation using controller_menu_navigation settings ---
+            elif event.type == pygame.JOYBUTTONDOWN:
+                nav = settings.get("controller_menu_navigation", {})
+                up_btn = nav.get("up")
+                down_btn = nav.get("down")
+                select_btn = nav.get("select")
+                # Check if the pressed button matches one of our navigation bindings.
+                if up_btn is not None and event.button == up_btn:
+                    selected_index = (selected_index - 1) % len(menu_options)
+                elif down_btn is not None and event.button == down_btn:
+                    selected_index = (selected_index + 1) % len(menu_options)
+                elif select_btn is not None and event.button == select_btn:
+                    if menu_options[selected_index] == "Start":
+                        return
+                    elif menu_options[selected_index] == "Options":
+                        options_menu()
+                    elif menu_options[selected_index] == "Quit":
+                        save_settings(settings)
+                        pygame.quit()
+                        sys.exit()
+            # --- Optional: D-Pad (Hat) Navigation ---
+            elif event.type == pygame.JOYHATMOTION:
+                hx, hy = event.value
+                if hy == 1:
+                    selected_index = (selected_index - 1) % len(menu_options)
+                elif hy == -1:
+                    selected_index = (selected_index + 1) % len(menu_options)
+        
+        # Fallback for Custom Music Looping:
+        if settings.get('use_custom_music', False):
+            if not pygame.mixer.music.get_busy() and not fallback_triggered:
+                fallback_triggered = True  # Mark that fallback has been triggered.
+                load_next_track(update_last_index=False)
+            elif pygame.mixer.music.get_busy():
+                # Reset the flag when music is playing normally.
+                fallback_triggered = False
 
+        # Additionally, handle the skip command:
+        if game_command == "skip":
+            skip_current_track()
+            game_command = None
 
+        clock.tick(30)
+
+# Main Options
 def options_menu():
     global settings, last_track_index
     selected_option = 0
     enter_pressed = False  # Flag to track whether Enter is held down
     options = [
-        ('left', 'Move Left'),
-        ('right', 'Move Right'),
-        ('down', 'Soft Drop'),
-        ('rotate', 'Rotate'),
-        ('hard_drop', 'Hard Drop'),
-        ('hold', 'Hold Piece'),
-        ('pause', 'Pause'),
+        ('keybinds', 'Keyboard Keybinds'),
+        ('controller_keybinds', 'Controller Keybinds'),
         ('difficulty', 'Difficulty'),
         ('flame_trails', 'Flame Trails'),
         ('grid_opacity', 'Grid Opacity'),
@@ -874,6 +1033,80 @@ def options_menu():
     # Calculate base_y so that the list is vertically centered.
     base_y = (SCREEN_HEIGHT - total_options_height) // 2
 
+    # --- Sub-Function: process_navigation_events ---
+    def process_navigation_events(options, selected_option, changing_key, enter_pressed):
+        """
+        Processes both keyboard and controller (including D-pad) navigation events
+        for the options menu. Returns updated values for selected_option, changing_key,
+        enter_pressed, and an action flag (which will be the current option key if selected,
+        or "back" if the user wants to exit).
+        """
+        action = None  # Action flag to indicate an option was chosen.
+        for event in pygame.event.get():
+            # ---------------------- QUIT EVENT ----------------------
+            if event.type == pygame.QUIT:
+                save_settings(settings)
+                pygame.quit()
+                sys.exit()
+            # ---------------------- MUSIC END EVENT ----------------------
+            elif event.type == MUSIC_END_EVENT:
+                handle_music_end_event()
+            # ---------------------- CONTROLLER EVENTS (JOYBUTTONDOWN) ----------------------
+            elif event.type == pygame.JOYBUTTONDOWN:
+                if changing_key is None:  # Only process navigation if not capturing a new key binding.
+                    nav = settings.get("controller_menu_navigation", {})
+                    up_btn = nav.get("up")
+                    down_btn = nav.get("down")
+                    select_btn = nav.get("select")
+                    back_btn = nav.get("back")
+                    if up_btn is not None and event.button == up_btn:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif down_btn is not None and event.button == down_btn:
+                        selected_option = (selected_option + 1) % len(options)
+                    elif select_btn is not None and event.button == select_btn:
+                        current_key = options[selected_option][0]
+                        # For options that capture keyboard bindings, ignore controller select.
+                        if current_key not in settings['controls']:
+                            action = current_key
+                    elif back_btn is not None and event.button == back_btn:
+                        action = "back"
+            # ---------------------- D-PAD (JOYHATMOTION) NAVIGATION ----------------------
+            elif event.type == pygame.JOYHATMOTION:
+                if changing_key is None:
+                    hx, hy = event.value
+                    if hy == 1:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif hy == -1:
+                        selected_option = (selected_option + 1) % len(options)
+            # ---------------------- KEYBOARD EVENTS (NAVIGATION & BINDING) ----------------------
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    if changing_key is not None:
+                        changing_key = None  # Cancel pending binding capture.
+                    else:
+                        action = "back"
+                elif changing_key is not None:
+                    # When capturing a new key binding, only keyboard keys are processed.
+                    settings['controls'][changing_key] = event.key
+                    changing_key = None
+                elif event.key == pygame.K_RETURN and not enter_pressed:
+                    enter_pressed = True  # Mark Enter as pressed.
+                    current_key = options[selected_option][0]
+                    if current_key in settings['controls']:
+                        # Begin capturing a new keyboard binding.
+                        changing_key = current_key
+                    else:
+                        action = current_key
+                elif event.key == pygame.K_UP:
+                    selected_option = (selected_option - 1) % len(options)
+                elif event.key == pygame.K_DOWN:
+                    selected_option = (selected_option + 1) % len(options)
+            elif event.type == pygame.KEYUP:
+                if event.key == pygame.K_RETURN:
+                    enter_pressed = False
+        return selected_option, changing_key, enter_pressed, action
+
+    # ---------------------- MAIN LOOP FOR OPTIONS MENU ----------------------
     while True:
         screen.fill(BLACK)
         title_text = tetris_font_large.render("Options", True, WHITE)
@@ -901,90 +1134,564 @@ def options_menu():
                 text = f"Use Custom Music: {'On' if settings.get('use_custom_music', False) else 'Off'}"
             elif key == 'select_music_dir':
                 dir_display = settings.get('music_directory', '')
-                text = f"Select Music Directory: {dir_display if dir_display else 'Not Selected'}"
-            
+                text = f"Dir: {dir_display}" if dir_display else "Music Dir: Not Selected"
             option_text = tetris_font_medium.render(text, True, color)
+            # Scale the text for select_music_dir based on whether a valid path is set.
+            if key == 'select_music_dir':
+                if settings.get('music_directory', ''):
+                    scale_factor = 0.6  # When a valid music directory is set.
+                else:
+                    scale_factor = 1.0  # When no valid music directory is set.
+                scaled_width = int(option_text.get_width() * scale_factor)
+                scaled_height = int(option_text.get_height() * scale_factor)
+                option_text = pygame.transform.scale(option_text, (scaled_width, scaled_height))
             y_coordinate = base_y + i * option_spacing
             screen.blit(option_text, (SCREEN_WIDTH // 2 - option_text.get_width() // 2, y_coordinate))
         
         pygame.display.flip()
 
-        # Event handling
+        # Call the navigation sub-function to process events.
+        selected_option, changing_key, enter_pressed, action = process_navigation_events(
+            options, selected_option, changing_key, enter_pressed
+        )
+        # Process the returned action flag.
+        if action is not None:
+            current_key = action
+            if current_key == 'keybinds':
+                keyboard_keybinds_menu()
+                pygame.event.clear()
+            elif current_key == 'controller_keybinds':
+                controller_keybinds_menu()
+                pygame.event.clear()
+            elif current_key == 'difficulty':
+                difficulties = ['easy', 'normal', 'hard', 'very hard']
+                new_idx = (difficulties.index(settings['difficulty']) + 1) % len(difficulties)
+                settings['difficulty'] = difficulties[new_idx]
+            elif current_key == 'flame_trails':
+                settings['flame_trails'] = not settings['flame_trails']
+            elif current_key == 'grid_opacity':
+                if settings['grid_opacity'] < 255:
+                    new_opacity = settings['grid_opacity'] + 64
+                    settings['grid_opacity'] = new_opacity if new_opacity <= 255 else 255
+                else:
+                    settings['grid_opacity'] = 0
+            elif current_key == 'grid_lines':
+                settings['grid_lines'] = not settings.get('grid_lines', True)
+            elif current_key == 'ghost_piece':
+                settings['ghost_piece'] = not settings.get('ghost_piece', True)
+            elif current_key == 'music_enabled':
+                settings['music_enabled'] = not settings.get('music_enabled', True)
+                if not settings['music_enabled']:
+                    stop_music()
+                else:
+                    if settings.get('use_custom_music', False):
+                        play_custom_music(settings)
+                    else:
+                        try:
+                            pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                            pygame.mixer.music.play(-1)
+                        except Exception as e:
+                            print(f"Error loading default music: {e}")
+            elif current_key == 'use_custom_music':
+                settings['use_custom_music'] = not settings.get('use_custom_music', False)
+                last_track_index = None
+                if settings.get('music_enabled', True):
+                    if settings.get('use_custom_music', False):
+                        play_custom_music(settings)
+                    else:
+                        try:
+                            pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                            pygame.mixer.music.play(-1)
+                        except Exception as e:
+                            print(f"Error loading default background music: {e}")
+                else:
+                    stop_music()
+            elif current_key == 'select_music_dir':
+                selected_dir = select_music_directory()
+                if selected_dir:
+                    settings['music_directory'] = selected_dir
+                    last_track_index = None
+                    if settings.get('use_custom_music', False) and settings.get('music_enabled', True):
+                        play_custom_music(settings)
+            elif current_key == 'back':
+                save_settings(settings)
+                return
+
+# Options Keyboard Controls            
+def keyboard_keybinds_menu():
+    selected_option = 0
+    changing_key = None
+    enter_pressed = False  # Flag to track whether Enter is held down
+
+    # Ensure the music skip key is available.
+    if 'skip_track' not in settings['controls']:
+        settings['controls']['skip_track'] = pygame.K_x
+
+    # List of keybind options: first element is the setting key,
+    # second element is a label to show.
+    keybind_options = [
+        ('left', 'Move Left'),
+        ('right', 'Move Right'),
+        ('down', 'Soft Drop'),
+        ('rotate', 'Rotate'),
+        ('hard_drop', 'Hard Drop'),
+        ('hold', 'Hold Piece'),
+        ('pause', 'Pause'),
+        ('skip_track', 'Skip Track'),
+        ('back', 'Back to Options')
+    ]
+    option_spacing = 45
+    base_y = 150  # starting vertical position
+
+    # --- Sub-Function: process_kb_nav_events ---
+    def process_kb_nav_events(options, selected_option, changing_key, enter_pressed):
+        """
+        Processes both keyboard and controller (including D-pad) navigation events
+        for the keyboard keybinds menu. Returns updated values for selected_option,
+        changing_key, enter_pressed, and an action flag.
+        
+        NOTE:
+          - This menu supports full controller navigation so that you can move up and down
+            and use the controller "back" button to exit.
+          - When the controller's select button is pressed on a bindable option,
+            binding capture is triggered (changing_key is set) so that subsequent controller keys
+            will not bind anything; only a keyboard key will be accepted.
+          - The action flag will be "back" if the user wants to exit, or None otherwise.
+        """
+        action = None  # Will hold the action if one is triggered.
+        # ---------------------- Process Each Event ----------------------
         for event in pygame.event.get():
+            # ---------------------- QUIT EVENT ----------------------
             if event.type == pygame.QUIT:
                 save_settings(settings)
                 pygame.quit()
                 sys.exit()
+            # ---------------------- MUSIC END EVENT ----------------------
+            elif event.type == MUSIC_END_EVENT:
+                handle_music_end_event()
+            # ---------------------- CONTROLLER EVENTS (JOYBUTTONDOWN) ----------------------
+            elif event.type == pygame.JOYBUTTONDOWN:
+                # Only process controller navigation if NOT in binding mode.
+                if changing_key is None:
+                    nav = settings.get("controller_menu_navigation", {})
+                    up_btn = nav.get("up")
+                    down_btn = nav.get("down")
+                    select_btn = nav.get("select")
+                    back_btn = nav.get("back")
+                    if up_btn is not None and event.button == up_btn:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif down_btn is not None and event.button == down_btn:
+                        selected_option = (selected_option + 1) % len(options)
+                    # Controller Back button exits the menu.
+                    elif back_btn is not None and event.button == back_btn:
+                        action = "back"
+                    # Controller Select triggers binding mode for bindable options.
+                    elif select_btn is not None and event.button == select_btn:
+                        current_key = options[selected_option][0]
+                        if current_key == "back":
+                            action = "back"
+                        else:
+                            # Trigger binding capture if this option is bindable.
+                            if current_key in settings['controls']:
+                                changing_key = current_key
+            # ---------------------- D-PAD (JOYHATMOTION) NAVIGATION ----------------------
+            elif event.type == pygame.JOYHATMOTION:
+                if changing_key is None:
+                    hx, hy = event.value
+                    if hy == 1:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif hy == -1:
+                        selected_option = (selected_option + 1) % len(options)
+            # ---------------------- KEYBOARD EVENTS (NAVIGATION & BINDING) ----------------------
             elif event.type == pygame.KEYDOWN:
-                # Only process Enter if it's not already pressed.
-                if event.key == pygame.K_RETURN and not enter_pressed:
-                    enter_pressed = True  # Mark Enter as pressed
-                    current_key = options[selected_option][0]
-                    if current_key in settings['controls']:
-                        changing_key = current_key
-                    elif current_key == 'difficulty':
-                        difficulties = ['easy', 'normal', 'hard', 'very hard']
-                        new_idx = (difficulties.index(settings['difficulty']) + 1) % len(difficulties)
-                        settings['difficulty'] = difficulties[new_idx]
-                    elif current_key == 'flame_trails':
-                        settings['flame_trails'] = not settings['flame_trails']
-                    elif current_key == 'grid_opacity':
-                        settings['grid_opacity'] = (settings['grid_opacity'] + 64) % 256
-                    elif current_key == 'grid_lines':
-                        settings['grid_lines'] = not settings.get('grid_lines', True)
-                    elif current_key == 'ghost_piece':
-                        settings['ghost_piece'] = not settings.get('ghost_piece', True)
-                    elif current_key == 'music_enabled':
-                        settings['music_enabled'] = not settings.get('music_enabled', True)
-                        if not settings['music_enabled']:
-                            stop_music()
-                        else:
-                            if settings.get('use_custom_music', False):
-                                play_custom_music(settings)
-                            else:
-                                try:
-                                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
-                                    pygame.mixer.music.play(-1)
-                                except Exception as e:
-                                    print(f"Error loading default music: {e}")
-                    elif current_key == 'use_custom_music':
-                        settings['use_custom_music'] = not settings.get('use_custom_music', False)
-                        last_track_index = None
-                        if settings.get('music_enabled', True):
-                            if settings.get('use_custom_music', False):
-                                play_custom_music(settings)
-                            else:
-                                try:
-                                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
-                                    pygame.mixer.music.play(-1)
-                                except Exception as e:
-                                    print(f"Error loading default background music: {e}")
-                        else:
-                            stop_music()
-                    elif current_key == 'select_music_dir':
-                        # Process the folder selection only once per Enter press.
-                        selected_dir = select_music_directory()
-                        if selected_dir:
-                            settings['music_directory'] = selected_dir
-                            last_track_index = None
-                            if settings.get('use_custom_music', False) and settings.get('music_enabled', True):
-                                play_custom_music(settings)
-                    elif current_key == 'back':
-                        save_settings(settings)
-                        return
-                elif changing_key:
+                # ESC cancels binding capture or exits the menu.
+                if event.key == pygame.K_ESCAPE:
+                    if changing_key is not None:
+                        changing_key = None  # Cancel pending binding
+                    else:
+                        action = "back"
+                # If waiting for a new key, capture the key press (keyboard only).
+                elif changing_key is not None:
                     settings['controls'][changing_key] = event.key
                     changing_key = None
+                # Process selection with Enter (keyboard only).
+                elif event.key == pygame.K_RETURN and not enter_pressed:
+                    enter_pressed = True  # Mark Enter as pressed.
+                    current_key = options[selected_option][0]
+                    if current_key == 'back':
+                        action = "back"
+                    else:
+                        # Begin capturing a new binding for this option (keyboard only).
+                        changing_key = current_key
+                # Navigate using Up arrow.
                 elif event.key == pygame.K_UP:
                     selected_option = (selected_option - 1) % len(options)
+                # Navigate using Down arrow.
                 elif event.key == pygame.K_DOWN:
                     selected_option = (selected_option + 1) % len(options)
-                elif event.key == pygame.K_ESCAPE:
-                    save_settings(settings)
-                    return
+            # ---------------------- KEYUP EVENT ----------------------
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_RETURN:
-                    enter_pressed = False  # Reset the flag when Enter is released
+                    enter_pressed = False  # Reset flag when Enter is released
+        return selected_option, changing_key, enter_pressed, action
+
+    # ---------------------- MAIN LOOP FOR KEYBOARD KEYBINDS MENU ----------------------
+    while True:
+        screen.fill(BLACK)
+        title_text = tetris_font_large.render("Keyboard Keybinds", True, WHITE)
+        scaled_title = pygame.transform.scale(title_text, (int(title_text.get_width() * 0.8),
+                                                             int(title_text.get_height() * 0.8)))
+        screen.blit(scaled_title, (SCREEN_WIDTH // 2 - scaled_title.get_width() // 2, 50))
+        
+        # Render each keybind option.
+        for i, (key, label) in enumerate(keybind_options):
+            color = RED if i == selected_option else WHITE
+            if key in settings['controls']:
+                display_text = f"{label}: {pygame.key.name(settings['controls'][key]).upper()}"
+            else:
+                display_text = label
+            option_text = tetris_font_medium.render(display_text, True, color)
+            y_coordinate = base_y + i * option_spacing
+            screen.blit(option_text, (SCREEN_WIDTH // 2 - option_text.get_width() // 2, y_coordinate))
+        
+        pygame.display.flip()
+
+        # Call the navigation sub-function to process events.
+        selected_option, changing_key, enter_pressed, action = process_kb_nav_events(
+            keybind_options, selected_option, changing_key, enter_pressed
+        )
+
+        # Process any action returned from the sub-function.
+        if action is not None:
+            if action == "back":
+                return
+
+# Options Controller Controls         
+def controller_keybinds_menu():
+    selected_option = 0
+    changing_button = None
+    enter_pressed = False  # Flag to track whether Enter is held down
+
+    # Ensure that a controller_controls dictionary exists in settings.
+    if 'controller_controls' not in settings:
+        settings['controller_controls'] = {
+            'left': None,
+            'right': None,
+            'down': None,
+            'rotate': None,
+            'hard_drop': None,
+            'hold': None,
+            'pause': None,
+            'skip_track': None
+        }
+
+    # Define your controller options.
+    controller_options = [
+        ('controller_menu_keybinds', 'Menu Nav Bindings'),
+        ('left', 'Move Left'),
+        ('right', 'Move Right'),
+        ('down', 'Soft Drop'),
+        ('rotate', 'Rotate'),
+        ('hard_drop', 'Hard Drop'),
+        ('hold', 'Hold Piece'),
+        ('pause', 'Pause'),
+        ('back', 'Back to Options')
+    ]
+    
+    # Define which options are bindable in controller_controls.
+    bindable_keys = {"left", "right", "down", "rotate", "hard_drop", "hold", "pause", "skip_track"}
+
+    option_spacing = 45
+    base_y = 150  # starting vertical position for options
+
+    # --- Sub-Function: process_ctrl_nav_events ---
+    def process_ctrl_nav_events(options, selected_option, changing_button, enter_pressed):
+        """
+        Processes both keyboard and controller (including D-pad) navigation events
+        for the controller keybinds menu. Returns updated values for selected_option,
+        changing_button, enter_pressed, and an action flag.
+        
+        NOTE:
+          - In this menu, controller keys CAN bind to controller_controls.
+          - Keyboard events are allowed for navigation and for triggering binding mode via Enter;
+            however, once binding mode is active (i.e. changing_button is not None), only
+            controller key inputs (JOYBUTTONDOWN) will update the binding.
+          - The action flag will be:
+              • "back" if the user wants to exit the menu,
+              • "menu_nav" if the user selects the "controller_menu_keybinds" option.
+          - If the "controller_menu_navigation" settings are not defined, then controller button
+            navigation via JOYBUTTONDOWN will not work—but D-pad (JOYHATMOTION) and keyboard navigation
+            will still be available.
+        """
+        action = None  # Will hold the action if one is triggered.
+        for event in pygame.event.get():
+            # ---------------------- QUIT EVENT ----------------------
+            if event.type == pygame.QUIT:
+                save_settings(settings)
+                pygame.quit()
+                sys.exit()
+            # ---------------------- MUSIC END EVENT ----------------------
+            elif event.type == MUSIC_END_EVENT:
+                handle_music_end_event()
+            # ---------------------- CONTROLLER EVENTS (JOYBUTTONDOWN) ----------------------
+            elif event.type == pygame.JOYBUTTONDOWN:
+                if changing_button is not None:
+                    # In binding mode: capture the controller button and update the binding.
+                    settings['controller_controls'][changing_button] = event.button
+                    changing_button = None
+                else:
+                    # Not in binding mode: process navigation via controller buttons.
+                    nav = settings.get("controller_menu_navigation", {})
+                    up_btn = nav.get("up")
+                    down_btn = nav.get("down")
+                    select_btn = nav.get("select")
+                    back_btn = nav.get("back")
+                    if up_btn is not None and event.button == up_btn:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif down_btn is not None and event.button == down_btn:
+                        selected_option = (selected_option + 1) % len(options)
+                    elif back_btn is not None and event.button == back_btn:
+                        action = "back"
+                    elif select_btn is not None and event.button == select_btn:
+                        current_option = options[selected_option][0]
+                        if current_option == 'back':
+                            action = "back"
+                        elif current_option == 'controller_menu_keybinds':
+                            # New: trigger the menu navigation submenu.
+                            action = "menu_nav"
+                        else:
+                            # Trigger binding capture for this option if it is bindable.
+                            if current_option in settings['controller_controls']:
+                                changing_button = current_option
+            # ---------------------- D-PAD (JOYHATMOTION) NAVIGATION ----------------------
+            elif event.type == pygame.JOYHATMOTION:
+                if changing_button is None:
+                    hx, hy = event.value
+                    if hy == 1:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif hy == -1:
+                        selected_option = (selected_option + 1) % len(options)
+            # ---------------------- KEYBOARD EVENTS (NAVIGATION) ----------------------
+            elif event.type == pygame.KEYDOWN:
+                # Keyboard navigation is allowed, but keyboard keys will not be used to bind.
+                if event.key == pygame.K_ESCAPE:
+                    if changing_button is not None:
+                        changing_button = None
+                    else:
+                        action = "back"
+                elif changing_button is None:
+                    if event.key == pygame.K_UP:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif event.key == pygame.K_DOWN:
+                        selected_option = (selected_option + 1) % len(options)
+                    # Use Enter to trigger binding capture (keyboard can trigger, but only controller keys will update).
+                    elif event.key == pygame.K_RETURN and not enter_pressed:
+                        enter_pressed = True
+                        current_option = options[selected_option][0]
+                        if current_option == 'back':
+                            action = "back"
+                        elif current_option == 'controller_menu_keybinds':
+                            # Trigger menu navigation submenu from keyboard as well.
+                            action = "menu_nav"
+                        else:
+                            if current_option in settings['controller_controls']:
+                                changing_button = current_option
+            elif event.type == pygame.KEYUP:
+                if event.key == pygame.K_RETURN:
+                    enter_pressed = False
+        return selected_option, changing_button, enter_pressed, action
+
+    # ---------------------- MAIN LOOP FOR CONTROLLER KEYBINDS MENU ----------------------
+    while True:
+        screen.fill(BLACK)
+        title_text = tetris_font_large.render("Controller Keybinds", True, WHITE)
+        scaled_title = pygame.transform.scale(title_text, (int(title_text.get_width() * 0.8),
+                                                             int(title_text.get_height() * 0.8)))
+        screen.blit(scaled_title, (SCREEN_WIDTH // 2 - scaled_title.get_width() // 2, 50))
+        
+        # Render each controller option.
+        for i, (key, label) in enumerate(controller_options):
+            color = RED if i == selected_option else WHITE
+            if key in bindable_keys:
+                current_binding = settings['controller_controls'].get(key)
+                if current_binding is not None:
+                    display_text = f"{label}: Button {current_binding}"
+                else:
+                    display_text = label
+            else:
+                display_text = label  # Non-bindable options.
+            option_text = tetris_font_medium.render(display_text, True, color)
+            y_coordinate = base_y + i * option_spacing
+            screen.blit(option_text, (SCREEN_WIDTH // 2 - option_text.get_width() // 2, y_coordinate))
+        
+        pygame.display.flip()
+
+        selected_option, changing_button, enter_pressed, action = process_ctrl_nav_events(
+            controller_options, selected_option, changing_button, enter_pressed
+        )
+        if action is not None:
+            if action == "back":
+                return
+            elif action == "menu_nav":
+                # Call the controller menu navigation bindings submenu.
+                controller_menu_nav_menu()
+
+# Options Controller Menu Keybinds
+def controller_menu_nav_menu():
+    selected_option = 0
+    changing_button = None
+    enter_pressed = False  # Flag to track whether Enter is held down
+
+    # Ensure the "controller_menu_navigation" settings exist.
+    if "controller_menu_navigation" not in settings:
+        settings["controller_menu_navigation"] = {
+            "up": None,
+            "down": None,
+            "left": None,
+            "right": None,
+            "select": None,
+            "back": None
+        }
+
+    # Define menu navigation options.
+    # The first four options are bindable; the final option ("exit") is non-bindable.
+    menu_nav_options = [
+        ("up", "Menu Up"),
+        ("down", "Menu Down"),
+        ("select", "Menu Select"),
+        ("back", "Menu Back"),
+        ("exit", "Back to Controller Keybinds")
+    ]
+    
+    # Define which options are bindable.
+    bindable_keys = {"up", "down", "select", "back"}
+
+    option_spacing = 45
+    base_y = 150  # Starting vertical position for the options
+
+    # --- Sub-Function: process_menu_nav_events ---
+    def process_menu_nav_events(options, selected_option, changing_button, enter_pressed):
+        """
+        Processes both keyboard and controller (including D-pad) navigation events
+        for the controller menu navigation bindings menu. Returns updated values for 
+        selected_option, changing_button, enter_pressed, and an action flag.
+        
+        NOTE:
+          - In this menu, binding capture is triggered by Enter (keyboard) or the controller
+            select button. However, once binding mode is active (i.e. changing_button is not None),
+            only controller key inputs (JOYBUTTONDOWN) will update the binding in settings["controller_menu_navigation"].
+          - Keyboard events are allowed for navigation but are not used to update the binding.
+          - The action flag will be "exit" (or "back") if the user selects that option.
+        """
+        action = None  # Will hold the action if one is triggered.
+        # ---------------------- Process Each Event ----------------------
+        for event in pygame.event.get():
+            # ---------------------- QUIT EVENT ----------------------
+            if event.type == pygame.QUIT:
+                save_settings(settings)
+                pygame.quit()
+                sys.exit()
+            # ---------------------- MUSIC END EVENT ----------------------
+            elif event.type == MUSIC_END_EVENT:
+                handle_music_end_event()
+            # ---------------------- CONTROLLER EVENTS (JOYBUTTONDOWN) ----------------------
+            elif event.type == pygame.JOYBUTTONDOWN:
+                if changing_button is not None:
+                    # In binding mode: capture the controller button and update the binding.
+                    settings["controller_menu_navigation"][changing_button] = event.button
+                    changing_button = None
+                else:
+                    # Not in binding mode: process navigation via controller buttons.
+                    # Lookup our controller navigation keys from settings.
+                    nav = settings.get("controller_menu_navigation", {})
+                    up_btn = nav.get("up")
+                    down_btn = nav.get("down")
+                    select_btn = nav.get("select")
+                    back_btn = nav.get("back")
+                    if up_btn is not None and event.button == up_btn:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif down_btn is not None and event.button == down_btn:
+                        selected_option = (selected_option + 1) % len(options)
+                    elif back_btn is not None and event.button == back_btn:
+                        action = "back"
+                    elif select_btn is not None and event.button == select_btn:
+                        current_option = options[selected_option][0]
+                        if current_option == "exit":
+                            action = "exit"
+                        else:
+                            # Trigger binding capture for this option if it is bindable.
+                            if current_option in bindable_keys:
+                                changing_button = current_option
+            # ---------------------- D-PAD (JOYHATMOTION) NAVIGATION ----------------------
+            elif event.type == pygame.JOYHATMOTION:
+                if changing_button is None:
+                    hx, hy = event.value
+                    if hy == 1:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif hy == -1:
+                        selected_option = (selected_option + 1) % len(options)
+            # ---------------------- KEYBOARD EVENTS (NAVIGATION) ----------------------
+            elif event.type == pygame.KEYDOWN:
+                # Keyboard navigation is allowed, but keyboard keys will not update the binding.
+                if event.key == pygame.K_ESCAPE:
+                    if changing_button is not None:
+                        changing_button = None  # Cancel pending binding.
+                    else:
+                        action = "back"
+                elif changing_button is None:
+                    if event.key == pygame.K_UP:
+                        selected_option = (selected_option - 1) % len(options)
+                    elif event.key == pygame.K_DOWN:
+                        selected_option = (selected_option + 1) % len(options)
+                    # Use Enter to trigger binding capture (keyboard can trigger, but binding update is done via controller).
+                    elif event.key == pygame.K_RETURN and not enter_pressed:
+                        enter_pressed = True
+                        current_option = options[selected_option][0]
+                        if current_option == "exit":
+                            action = "exit"
+                        else:
+                            if current_option in bindable_keys:
+                                changing_button = current_option
+            elif event.type == pygame.KEYUP:
+                if event.key == pygame.K_RETURN:
+                    enter_pressed = False
+        return selected_option, changing_button, enter_pressed, action
+
+    # ---------------------- MAIN LOOP FOR CONTROLLER MENU NAV KEYBINDS ----------------------
+    while True:
+        screen.fill(BLACK)
+        title_text = tetris_font_large.render("Menu Nav Bindings", True, WHITE)
+        scaled_title = pygame.transform.scale(title_text, (int(title_text.get_width() * 0.8),
+                                                             int(title_text.get_height() * 0.8)))
+        screen.blit(scaled_title, (SCREEN_WIDTH // 2 - scaled_title.get_width() // 2, 50))
+        
+        # Render each menu navigation option.
+        for i, (key, label) in enumerate(menu_nav_options):
+            color = RED if i == selected_option else WHITE
+            if key in bindable_keys:
+                current_binding = settings["controller_menu_navigation"].get(key)
+                if current_binding is not None:
+                    display_text = f"{label}: Button {current_binding}"
+                else:
+                    display_text = label
+            else:
+                display_text = label  # For non-bindable options.
+            option_text = tetris_font_medium.render(display_text, True, color)
+            # If this is the "exit" option, scale it.
+            if key == "exit":
+                option_text = pygame.transform.scale(option_text, (int(option_text.get_width() * 0.85),
+                                                                     int(option_text.get_height() * 0.85)))
+            y_coordinate = base_y + i * option_spacing
+            screen.blit(option_text, (SCREEN_WIDTH // 2 - option_text.get_width() // 2, y_coordinate))
+        
+        pygame.display.flip()
+
+        selected_option, changing_button, enter_pressed, action = process_menu_nav_events(
+            menu_nav_options, selected_option, changing_button, enter_pressed
+        )
+        if action is not None:
+            if action == "exit" or action == "back":
+                return
 
 def pause_game():
     global settings
@@ -1104,411 +1811,6 @@ def place_tetromino(tetromino, offset, grid, color_index):
                 if 0 <= x < GRID_WIDTH and 0 <= y < GRID_HEIGHT:
                     grid[y][x] = color_index
 
-# -------------------------- Custom Music Functions --------------------------
-def play_custom_music(settings):
-    global custom_music_playlist, current_track_index, last_track_index
-    if not settings.get('music_enabled', True):
-        pygame.mixer.music.stop()
-        return
-
-    update_custom_music_playlist(settings)
-    
-    # If using custom music and we have a previously saved track index, restore it.
-    if settings.get('use_custom_music', False) and last_track_index is not None and last_track_index < len(custom_music_playlist):
-        current_track_index = last_track_index
-    else:
-        current_track_index = 0
-
-    if custom_music_playlist:
-        track = custom_music_playlist[current_track_index]
-        pygame.mixer.music.stop()
-        try:
-            pygame.mixer.music.load(track)
-            pygame.mixer.music.play(0)  # play once so MUSIC_END_EVENT fires when track ends
-            pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
-        except Exception as e:
-            print(f"Error playing custom music: {e}")
-    else:
-        print("No music files found in the selected directory.")
-
-
-def skip_current_track():
-    global custom_music_playlist, current_track_index, last_track_index, settings
-    # If music is disabled, do nothing.
-    if not settings.get('music_enabled', True):
-        return
-
-    if custom_music_playlist:
-        current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-        try:
-            pygame.mixer.music.load(custom_music_playlist[current_track_index])
-            pygame.mixer.music.play(0)
-            # Save the new track index so that when game over occurs and later resumes,
-            # it will remember the last track that was played.
-            last_track_index = current_track_index
-        except Exception as e:
-            print(f"Error skipping to next track: {e}")
-
-def stop_music():
-    pygame.mixer.music.stop()
-
-# -------------------------- Menu System --------------------------
-def draw_main_menu():
-    screen.fill(BLACK)
-    title_text = tetris_font_large.render("TetraFusion", True, random.choice(COLORS))
-    start_text = tetris_font_medium.render("Press ENTER to Start", True, WHITE)
-    options_text = tetris_font_medium.render("Press O for Options", True, WHITE)
-    exit_text = tetris_font_medium.render("Press ESC to Quit", True, WHITE)
-    screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, SCREEN_HEIGHT//3))
-    screen.blit(start_text, (SCREEN_WIDTH//2 - start_text.get_width()//2, SCREEN_HEIGHT//2))
-    screen.blit(options_text, (SCREEN_WIDTH//2 - options_text.get_width()//2, SCREEN_HEIGHT//2+50))
-    screen.blit(exit_text, (SCREEN_WIDTH//2 - exit_text.get_width()//2, SCREEN_HEIGHT//2+100))
-    pygame.display.flip()
-
-def main_menu():
-    # Ensure music is started when entering the main menu.
-    if settings.get('music_enabled', True):
-        if settings.get('use_custom_music', False):
-            if not pygame.mixer.music.get_busy():
-                play_custom_music(settings)
-        else:
-            if not pygame.mixer.music.get_busy():
-                try:
-                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
-                    pygame.mixer.music.play(-1)  # Loop indefinitely
-                except Exception as e:
-                    print(f"Error loading default background music: {e}")
-
-    while True:
-        draw_main_menu()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type == MUSIC_END_EVENT:
-                # If using custom music, cycle to the next track.
-                if settings.get('use_custom_music', False) and custom_music_playlist:
-                    global current_track_index
-                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-                    try:
-                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
-                        pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when track ends
-                    except Exception as e:
-                        print(f"Error loading next track: {e}")
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:
-                    return
-                elif event.key == pygame.K_o:
-                    options_menu()
-                elif event.key == pygame.K_ESCAPE:
-                    save_settings(settings)
-                    pygame.quit()
-                    sys.exit()
-
-def pause_game():
-    global settings
-    pause_text = tetris_font_large.render("PAUSED", True, WHITE)
-    paused = True
-    pygame.event.clear(pygame.KEYDOWN)
-    
-    # Pause the music as soon as the game is paused
-    pygame.mixer.music.pause()
-    
-    while paused:
-        screen.fill(BLACK)
-        screen.blit(pause_text, (SCREEN_WIDTH//2 - pause_text.get_width()//2, SCREEN_HEIGHT//2))
-        pygame.display.flip()
-        for event in pygame.event.get():
-            if event.type==pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type==pygame.KEYDOWN:
-                if event.key==settings['controls']['pause'] or event.key==pygame.K_ESCAPE:
-                    paused = False
-                    
-    # Unpause the music when the game is resumed
-    pygame.mixer.music.unpause()
-
-def place_tetromino(tetromino, offset, grid, color_index):
-    for cy, row in enumerate(tetromino):
-        for cx, cell in enumerate(row):
-            if cell:
-                x = offset[0] + cx
-                y = offset[1] + cy
-                if 0 <= x < GRID_WIDTH and 0 <= y < GRID_HEIGHT:
-                    grid[y][x] = color_index
-
-
-# -------------------------- Custom Music Functions --------------------------
-def play_custom_music(settings):
-    global custom_music_playlist, current_track_index, last_track_index
-    if not settings.get('music_enabled', True):
-        pygame.mixer.music.stop()
-        return
-
-    update_custom_music_playlist(settings)
-    
-    # If using custom music and we have a previously saved track index, restore it.
-    if settings.get('use_custom_music', False) and last_track_index is not None and last_track_index < len(custom_music_playlist):
-        current_track_index = last_track_index
-    else:
-        current_track_index = 0
-
-    if custom_music_playlist:
-        track = custom_music_playlist[current_track_index]
-        pygame.mixer.music.stop()
-        try:
-            pygame.mixer.music.load(track)
-            pygame.mixer.music.play(0)  # play once so MUSIC_END_EVENT fires when track ends
-            pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
-        except Exception as e:
-            print(f"Error playing custom music: {e}")
-    else:
-        print("No music files found in the selected directory.")
-
-
-def skip_current_track():
-    global custom_music_playlist, current_track_index, last_track_index, settings
-    # If music is disabled, do nothing.
-    if not settings.get('music_enabled', True):
-        return
-
-    if custom_music_playlist:
-        current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-        try:
-            pygame.mixer.music.load(custom_music_playlist[current_track_index])
-            pygame.mixer.music.play(0)
-            # Save the new track index so that when game over occurs and later resumes,
-            # it will remember the last track that was played.
-            last_track_index = current_track_index
-        except Exception as e:
-            print(f"Error skipping to next track: {e}")
-
-def stop_music():
-    pygame.mixer.music.stop()
-
-# -------------------------- Menu System --------------------------
-def draw_main_menu():
-    screen.fill(BLACK)
-    title_text = tetris_font_large.render("TetraFusion", True, random.choice(COLORS))
-    start_text = tetris_font_medium.render("Press ENTER to Start", True, WHITE)
-    options_text = tetris_font_medium.render("Press O for Options", True, WHITE)
-    exit_text = tetris_font_medium.render("Press ESC to Quit", True, WHITE)
-    screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, SCREEN_HEIGHT//3))
-    screen.blit(start_text, (SCREEN_WIDTH//2 - start_text.get_width()//2, SCREEN_HEIGHT//2))
-    screen.blit(options_text, (SCREEN_WIDTH//2 - options_text.get_width()//2, SCREEN_HEIGHT//2+50))
-    screen.blit(exit_text, (SCREEN_WIDTH//2 - exit_text.get_width()//2, SCREEN_HEIGHT//2+100))
-    pygame.display.flip()
-
-def main_menu():
-    # Ensure music is started when entering the main menu.
-    if settings.get('music_enabled', True):
-        if settings.get('use_custom_music', False):
-            if not pygame.mixer.music.get_busy():
-                play_custom_music(settings)
-        else:
-            if not pygame.mixer.music.get_busy():
-                try:
-                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
-                    pygame.mixer.music.play(-1)  # Loop indefinitely
-                except Exception as e:
-                    print(f"Error loading default background music: {e}")
-
-    while True:
-        draw_main_menu()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type == MUSIC_END_EVENT:
-                # If using custom music, cycle to the next track.
-                if settings.get('use_custom_music', False) and custom_music_playlist:
-                    global current_track_index
-                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-                    try:
-                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
-                        pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when track ends
-                    except Exception as e:
-                        print(f"Error loading next track: {e}")
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:
-                    return
-                elif event.key == pygame.K_o:
-                    options_menu()
-                elif event.key == pygame.K_ESCAPE:
-                    save_settings(settings)
-                    pygame.quit()
-                    sys.exit()
-
-def pause_game():
-    global settings
-    pause_text = tetris_font_large.render("PAUSED", True, WHITE)
-    paused = True
-    pygame.event.clear(pygame.KEYDOWN)
-    
-    # Pause the music as soon as the game is paused
-    pygame.mixer.music.pause()
-    
-    while paused:
-        screen.fill(BLACK)
-        screen.blit(pause_text, (SCREEN_WIDTH//2 - pause_text.get_width()//2, SCREEN_HEIGHT//2))
-        pygame.display.flip()
-        for event in pygame.event.get():
-            if event.type==pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type==pygame.KEYDOWN:
-                if event.key==settings['controls']['pause'] or event.key==pygame.K_ESCAPE:
-                    paused = False
-                    
-    # Unpause the music when the game is resumed
-    pygame.mixer.music.unpause()
-
-def place_tetromino(tetromino, offset, grid, color_index):
-    for cy, row in enumerate(tetromino):
-        for cx, cell in enumerate(row):
-            if cell:
-                x = offset[0] + cx
-                y = offset[1] + cy
-                if 0 <= x < GRID_WIDTH and 0 <= y < GRID_HEIGHT:
-                    grid[y][x] = color_index
-
-# -------------------------- Custom Music Functions --------------------------
-def play_custom_music(settings):
-    global custom_music_playlist, current_track_index, last_track_index
-    if not settings.get('music_enabled', True):
-        pygame.mixer.music.stop()
-        return
-
-    update_custom_music_playlist(settings)
-    
-    # If using custom music and we have a previously saved track index, restore it.
-    if settings.get('use_custom_music', False) and last_track_index is not None and last_track_index < len(custom_music_playlist):
-        current_track_index = last_track_index
-    else:
-        current_track_index = 0
-
-    if custom_music_playlist:
-        track = custom_music_playlist[current_track_index]
-        pygame.mixer.music.stop()
-        try:
-            pygame.mixer.music.load(track)
-            pygame.mixer.music.play(0)  # play once so MUSIC_END_EVENT fires when track ends
-            pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
-        except Exception as e:
-            print(f"Error playing custom music: {e}")
-    else:
-        print("No music files found in the selected directory.")
-
-
-def skip_current_track():
-    global custom_music_playlist, current_track_index, last_track_index, settings
-    # If music is disabled, do nothing.
-    if not settings.get('music_enabled', True):
-        return
-
-    if custom_music_playlist:
-        current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-        try:
-            pygame.mixer.music.load(custom_music_playlist[current_track_index])
-            pygame.mixer.music.play(0)
-            # Save the new track index so that when game over occurs and later resumes,
-            # it will remember the last track that was played.
-            last_track_index = current_track_index
-        except Exception as e:
-            print(f"Error skipping to next track: {e}")
-
-def stop_music():
-    pygame.mixer.music.stop()
-
-# -------------------------- Menu System --------------------------
-def draw_main_menu(selected_index, menu_options):
-    """
-    Draws the main menu screen with a title and a list of selectable options.
-    The option at index 'selected_index' is highlighted.
-    """
-    screen.fill(BLACK)
-    title_text = tetris_font_large.render("TetraFusion", True, random.choice(COLORS))
-    # Draw title above the menu options.
-    screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, SCREEN_HEIGHT//3 - 100))
-    # Draw each menu option.
-    for i, option in enumerate(menu_options):
-        color = RED if i == selected_index else WHITE
-        option_text = tetris_font_medium.render(option, True, color)
-        x = SCREEN_WIDTH//2 - option_text.get_width()//2
-        y = SCREEN_HEIGHT//2 + i * 50
-        screen.blit(option_text, (x, y))
-    pygame.display.flip()
-
-def main_menu():
-    # Start background music if enabled.
-    if settings.get('music_enabled', True):
-        if settings.get('use_custom_music', False):
-            if not pygame.mixer.music.get_busy():
-                play_custom_music(settings)
-        else:
-            if not pygame.mixer.music.get_busy():
-                try:
-                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
-                    pygame.mixer.music.play(-1)
-                except Exception as e:
-                    print(f"Error loading default background music: {e}")
-    # Define the menu options.
-    menu_options = ["Start", "Options", "Quit"]
-    selected_index = 0
-    joy_delay = 150  # milliseconds
-    last_move = pygame.time.get_ticks()
-
-    while True:
-        draw_main_menu(selected_index, menu_options)
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            # --- Keyboard Input ---
-            elif event.type == pygame.KEYDOWN:
-                if event.key in (pygame.K_DOWN, pygame.K_s):
-                    selected_index = (selected_index + 1) % len(menu_options)
-                elif event.key in (pygame.K_UP, pygame.K_w):
-                    selected_index = (selected_index - 1) % len(menu_options)
-                elif event.key == pygame.K_RETURN:
-                    if menu_options[selected_index] == "Start":
-                        return
-                    elif menu_options[selected_index] == "Options":
-                        options_menu()
-                    elif menu_options[selected_index] == "Quit":
-                        save_settings(settings)
-                        pygame.quit()
-                        sys.exit()
-            # --- Joypad Hat (D-pad) Input ---
-            elif event.type == pygame.JOYHATMOTION:
-                cur_time = pygame.time.get_ticks()
-                if cur_time - last_move > joy_delay:
-                    hx, hy = event.value
-                    if hy == -1:
-                        selected_index = (selected_index + 1) % len(menu_options)
-                    elif hy == 1:
-                        selected_index = (selected_index - 1) % len(menu_options)
-                    last_move = cur_time
-            # --- Joypad Button Input (button 0 acts as select) ---
-            elif event.type == pygame.JOYBUTTONDOWN:
-                if event.button == 0:
-                    if menu_options[selected_index] == "Start":
-                        return
-                    elif menu_options[selected_index] == "Options":
-                        options_menu()
-                    elif menu_options[selected_index] == "Quit":
-                        save_settings(settings)
-                        pygame.quit()
-                        sys.exit()
-        clock.tick(30)
-
-
 # -------------------------- Game Loop --------------------------
 def run_game():
     global high_score, high_score_name, subwindow_visible, last_click_time, settings, heartbeat_playing, game_command
@@ -1529,7 +1831,7 @@ def run_game():
     difficulty = settings['difficulty']
     flame_trails_enabled = settings['flame_trails']
     grid_color = tuple(settings['grid_color'])
-    grid_opacity = settings.get('grid_opacity', 128)
+    grid_opacity = settings.get('grid_opacity', 255)
     grid_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
     draw_3d_grid(grid_surface, grid_color, grid_opacity)
 
@@ -1583,6 +1885,272 @@ def run_game():
     # For joypad continuous movement, set a rate–limit.
     last_joy_move = pygame.time.get_ticks()
     joy_delay = 150  # milliseconds
+    
+    # -------------------------- Game Helpers --------------------------
+    
+    # tetromino Logic (hold etc..)
+    def lock_and_update_tetromino(current_time):
+        nonlocal tetromino, offset, score, game_over, grid, lines_cleared_total
+        global hold_used
+        nonlocal pieces_dropped, screen_shake, is_tetris, tetris_last_flash, level
+        nonlocal fall_speed, transition_start_time, last_flash_time, flash_count
+        nonlocal next_tetromino, shape_index, color_index, tetromino_bag
+        # Now use current_time as a parameter inside the function.
+
+        # Calculate how far the tetromino can fall
+        hard_drop_rows = 0
+        temp_offset = offset.copy()
+        while valid_position(tetromino, [temp_offset[0], temp_offset[1] + 1], grid):
+            temp_offset[1] += 1
+            hard_drop_rows += 1
+        offset[1] = temp_offset[1]
+    
+        # Update score based on drop distance
+        score += hard_drop_rows * 2
+    
+        # Generate dust particles for visual effect
+        for _ in range(20 + hard_drop_rows * 5):
+            dust_particles.append(DustParticle(
+                (offset[0] + random.uniform(-1, len(tetromino[0]) + 1)) * BLOCK_SIZE,
+                (offset[1] + len(tetromino)) * BLOCK_SIZE
+            ))
+    
+        # Check if dropping results in game over
+        if check_game_over(grid):
+            game_over = True
+            return
+    
+        # Lock tetromino: record its position and update grid
+        original_grid = [row[:] for row in grid]
+        place_tetromino(tetromino, offset, grid, color_index)
+        hold_used = False
+        grid, lines_cleared = clear_lines(grid)
+        lines_cleared_total += lines_cleared
+        score = update_score(score, lines_cleared)
+        pieces_dropped += 1
+    
+        # If any lines are cleared, trigger screen shake and explosion effects
+        if lines_cleared > 0:
+            screen_shake = 8 + lines_cleared * 3
+            full_lines = [y for y in range(GRID_HEIGHT) if all(original_grid[y])]
+            for y in full_lines:
+                for x in range(GRID_WIDTH):
+                    if original_grid[y][x] != 0:
+                        explosion_particles.append(Explosion(
+                            x * BLOCK_SIZE + BLOCK_SIZE // 2,
+                            y * BLOCK_SIZE + BLOCK_SIZE // 2,
+                            COLORS[original_grid[y][x] - 1],
+                            particle_count=45,
+                            max_speed=15,
+                            duration=75
+                        ))
+    
+        # Check for a Tetris (clearing 4 lines)
+        if lines_cleared == 4:
+            is_tetris = True
+            tetris_last_flash = current_time
+    
+        # Level up if enough lines have been cleared
+        new_level = lines_cleared_total // 10 + 1
+        if new_level > level:
+            level = new_level
+            fall_speed = max(50, int(base_fall_speed * (0.85 ** (level - 1))))
+            in_level_transition = True
+            transition_start_time = current_time
+            last_flash_time = current_time
+            flash_count = 0
+    
+        # Update tetromino for next piece
+        tetromino = next_tetromino
+        shape_index = get_shape_index(tetromino) or 0
+        color_index = (shape_index + level - 1) % len(COLORS) + 1
+        next_tetromino = tetromino_bag.get_next_tetromino()
+        offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
+    
+    # All events stored here now
+    def handle_events(current_time):
+        # Declare all run_game() local variables you'll modify:
+        nonlocal left_pressed, right_pressed, fast_fall, offset, tetromino, last_horizontal_move, shape_index, color_index, score, next_tetromino, tetris_last_flash
+        # Declare globals:
+        global hold_used, hold_piece, game_command
+        events = pygame.event.get()  # Get all events once for this frame.
+        for event in events:
+            if event.type == pygame.QUIT:
+                save_settings(settings)
+                pygame.quit()
+                sys.exit()
+            elif event.type == MUSIC_END_EVENT:
+                handle_music_end_event()
+
+        # -- Keyboard Input ---
+            elif event.type == pygame.KEYDOWN:
+                if event.key == controls['left']:
+                    left_pressed = True
+                    new_x = offset[0] - 1
+                    if valid_position(tetromino, [new_x, offset[1]], grid):
+                        offset[0] = new_x
+                    last_horizontal_move = current_time
+                elif event.key == controls['right']:
+                    right_pressed = True
+                    new_x = offset[0] + 1
+                    if valid_position(tetromino, [new_x, offset[1]], grid):
+                        offset[0] = new_x
+                    last_horizontal_move = current_time
+                elif event.key == controls['down']:
+                    fast_fall = True
+                elif event.key == controls['rotate']:
+                    rotated, new_offset = rotate_tetromino_with_kick(tetromino, offset, grid)
+                    tetromino, offset = rotated, new_offset
+                elif event.key == controls.get('hold', pygame.K_c):
+                    if not hold_used:
+                        hold_used = True
+                        if hold_piece is None:
+                            hold_piece = copy.deepcopy(tetromino)
+                            tetromino = tetromino_bag.get_next_tetromino()
+                            shape_index = get_shape_index(tetromino) or 0
+                            color_index = (shape_index + level - 1) % len(COLORS) + 1
+                            offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
+                        else:
+                            tetromino, hold_piece = copy.deepcopy(hold_piece), copy.deepcopy(tetromino)
+                            shape_index = get_shape_index(tetromino) or 0
+                            color_index = (shape_index + level - 1) % len(COLORS) + 1
+                            offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
+                elif event.key == controls['pause']:
+                    pause_game()
+                elif event.key == controls['hard_drop']:
+                    lock_and_update_tetromino(current_time)
+            elif event.type == pygame.KEYUP:
+                if event.key == controls['left']:
+                    left_pressed = False
+                elif event.key == controls['right']:
+                    right_pressed = False
+                elif event.key == controls['down']:
+                    fast_fall = False
+            # --- Joystick Input ---
+            elif event.type == pygame.JOYBUTTONDOWN:
+                if event.button == 0:  # Rotate
+                    rotated, new_offset = rotate_tetromino_with_kick(tetromino, offset, grid)
+                    tetromino, offset = rotated, new_offset
+                elif event.button == 1:  # Hard drop
+                    lock_and_update_tetromino(current_time)
+                elif event.button == 2:  # Hold
+                    if not hold_used:
+                        hold_used = True
+                        if hold_piece is None:
+                            hold_piece = copy.deepcopy(tetromino)
+                            tetromino = tetromino_bag.get_next_tetromino()
+                        else:
+                            temp = copy.deepcopy(tetromino)
+                            tetromino = copy.deepcopy(hold_piece)
+                            hold_piece = temp
+                        offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
+                        shape_index = get_shape_index(tetromino) or 0
+                        color_index = (shape_index + level - 1) % len(COLORS) + 1
+                elif event.button == 7:  # Pause
+                    pause_game()
+            elif event.type == pygame.JOYHATMOTION:
+                pass
+            # --- Mouse Input ---
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.pos[0] >= SCREEN_WIDTH:
+                    rel_x = event.pos[0] - SCREEN_WIDTH
+                    rel_y = event.pos[1]
+                    if sound_bar_rect and sound_bar_rect.collidepoint(rel_x, rel_y):
+                        new_volume = (rel_x - sound_bar_rect.x) / sound_bar_rect.width
+                        pygame.mixer.music.set_volume(new_volume)
+                    if restart_button_rect and restart_button_rect.collidepoint(rel_x, rel_y):
+                        game_command = "restart"
+                        return
+                    if settings.get('use_custom_music', False):
+                        if skip_button_rect and skip_button_rect.collidepoint(rel_x, rel_y):
+                            skip_current_track()
+                    if menu_button_rect and menu_button_rect.collidepoint(rel_x, rel_y):
+                        game_command = "menu"
+                        return
+            elif event.type == pygame.MOUSEMOTION:
+                if event.buttons[0]:
+                    if event.pos[0] >= SCREEN_WIDTH:
+                        rel_x = event.pos[0] - SCREEN_WIDTH
+                        if sound_bar_rect and sound_bar_rect.collidepoint(rel_x, event.pos[1]):
+                            new_volume = (rel_x - sound_bar_rect.x) / sound_bar_rect.width
+                            pygame.mixer.music.set_volume(new_volume)
+    
+    # Drawing related stuff
+    def draw_game(shake_x, shake_y):
+        # Clear screen
+        screen.fill(BLACK)
+    
+        if not in_level_transition:
+            # First, draw all placed blocks from the grid
+            for y in range(GRID_HEIGHT):
+                for x in range(GRID_WIDTH):
+                    if grid[y][x]:
+                        draw_3d_block(screen, COLORS[grid[y][x] - 1],
+                                    x * BLOCK_SIZE + shake_x,
+                                    y * BLOCK_SIZE + shake_y,
+                                    BLOCK_SIZE)
+            # Then, draw the current falling tetromino
+            for cy, row in enumerate(tetromino):
+                for cx, cell in enumerate(row):
+                    if cell:
+                        draw_3d_block(screen, COLORS[color_index - 1],
+                                    (offset[0] + cx) * BLOCK_SIZE + shake_x,
+                                    (offset[1] + cy) * BLOCK_SIZE + shake_y,
+                                    BLOCK_SIZE)
+            # Now, overlay the grid (which is drawn using the updated opacity and thicker lines)
+            screen.blit(grid_surface, (shake_x, shake_y))
+            # Draw the ghost piece over the grid using the custom color options
+            if settings.get('ghost_piece', True):
+                draw_ghost_piece(tetromino, offset, grid, COLORS[color_index - 1])
+            # Draw explosions, trail particles, and dust particles
+            for explosion in explosion_particles:
+                explosion.draw(screen, (shake_x, shake_y))
+            for particle in trail_particles:
+                particle.draw(screen)
+            for particle in dust_particles:
+                particle.draw(screen)
+        else:
+            # In level transition, draw grid blocks with overlay
+            for y in range(GRID_HEIGHT):
+                for x in range(GRID_WIDTH):
+                    if grid[y][x]:
+                        draw_3d_block(screen, COLORS[grid[y][x] - 1],
+                                    x * BLOCK_SIZE + shake_x,
+                                    y * BLOCK_SIZE + shake_y,
+                                    BLOCK_SIZE)
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            overlay.set_alpha(128)
+            overlay.fill(BLACK)
+            screen.blit(overlay, (0, 0))
+            level_text = tetris_font_large.render(f"LEVEL {level}", True, random.choice(COLORS))
+            level_shake_x = random.randint(-10, 10)
+            level_shake_y = random.randint(-10, 10)
+            screen.blit(level_text, (SCREEN_WIDTH//2 - level_text.get_width()//2 + level_shake_x,
+                                    SCREEN_HEIGHT//2 - level_text.get_height()//2 + level_shake_y))
+        # Draw subwindow with game info and update display
+        draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_total,
+                    is_tetris, tetris_last_flash, tetris_flash_time)
+        pygame.display.flip()
+    
+    # Particle Updater
+    def update_particles(wind_force):
+        # Update and remove trail particles
+        for particle in trail_particles[:]:
+            particle.update(wind_force, screen)
+            if particle.age >= particle.max_age:
+                trail_particles.remove(particle)
+        # Update and remove dust particles
+        for particle in dust_particles[:]:
+            particle.update()
+            if particle.age >= particle.max_age:
+                dust_particles.remove(particle)
+        # Update and remove explosion particles
+        for explosion in explosion_particles[:]:
+            explosion.update()
+            if explosion.lifetime <= 0:
+                explosion_particles.remove(explosion)
+
+# -------------------------- Continue Game Loop --------------------------
 
     while True:
         current_time = pygame.time.get_ticks()
@@ -1621,276 +2189,16 @@ def run_game():
                     last_flash_time = current_time
                     flash_count += 1
 
-        # --- Drawing Section ---
-        screen.fill(BLACK)
-        screen.blit(grid_surface, (shake_x, shake_y))
-        if not in_level_transition:
-            for y in range(GRID_HEIGHT):
-                for x in range(GRID_WIDTH):
-                    if grid[y][x]:
-                        draw_3d_block(screen, COLORS[grid[y][x] - 1],
-                                      x * BLOCK_SIZE + shake_x,
-                                      y * BLOCK_SIZE + shake_y,
-                                      BLOCK_SIZE)
-                    if settings.get('grid_lines', True):
-                        pygame.draw.rect(screen, grid_color,
-                                         (x * BLOCK_SIZE + shake_x,
-                                          y * BLOCK_SIZE + shake_y,
-                                          BLOCK_SIZE, BLOCK_SIZE), 1)
-            if settings.get('ghost_piece', True):
-                draw_ghost_piece(tetromino, offset, grid)
-            for cy, row in enumerate(tetromino):
-                for cx, cell in enumerate(row):
-                    if cell:
-                        draw_3d_block(screen, COLORS[color_index - 1],
-                                      (offset[0] + cx) * BLOCK_SIZE + shake_x,
-                                      (offset[1] + cy) * BLOCK_SIZE + shake_y,
-                                      BLOCK_SIZE)
-            for explosion in explosion_particles:
-                explosion.draw(screen, (shake_x, shake_y))
-            for particle in trail_particles:
-                particle.draw(screen)
-            for particle in dust_particles:
-                particle.draw(screen)
-        else:
-            for y in range(GRID_HEIGHT):
-                for x in range(GRID_WIDTH):
-                    if grid[y][x]:
-                        draw_3d_block(screen, COLORS[grid[y][x] - 1],
-                                      x * BLOCK_SIZE + shake_x,
-                                      y * BLOCK_SIZE + shake_y,
-                                      BLOCK_SIZE)
-            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-            overlay.set_alpha(128)
-            overlay.fill(BLACK)
-            screen.blit(overlay, (0, 0))
-            level_text = tetris_font_large.render(f"LEVEL {level}", True, random.choice(COLORS))
-            level_shake_x = random.randint(-10, 10)
-            level_shake_y = random.randint(-10, 10)
-            screen.blit(level_text, (SCREEN_WIDTH//2 - level_text.get_width()//2 + level_shake_x,
-                                      SCREEN_HEIGHT//2 - level_text.get_height()//2 + level_shake_y))
-        draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_total,
-                       is_tetris, tetris_last_flash, tetris_flash_time)
-        pygame.display.flip()
-
-        # --- Event Handling ---
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type == MUSIC_END_EVENT:
-                if settings.get('use_custom_music', False) and custom_music_playlist:
-                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-                    try:
-                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
-                        pygame.mixer.music.play(0)
-                    except Exception as e:
-                        print(f"Error loading next track: {e}")
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.pos[0] >= SCREEN_WIDTH:
-                    rel_x = event.pos[0] - SCREEN_WIDTH
-                    rel_y = event.pos[1]
-                    if sound_bar_rect and sound_bar_rect.collidepoint(rel_x, rel_y):
-                        new_volume = (rel_x - sound_bar_rect.x) / sound_bar_rect.width
-                        pygame.mixer.music.set_volume(new_volume)
-                    if restart_button_rect and restart_button_rect.collidepoint(rel_x, rel_y):
-                        game_command = "restart"
-                        return
-                    if settings.get('use_custom_music', False):
-                        if skip_button_rect and skip_button_rect.collidepoint(rel_x, rel_y):
-                            skip_current_track()
-                    if menu_button_rect and menu_button_rect.collidepoint(rel_x, rel_y):
-                        game_command = "menu"
-                        return
-            elif event.type == pygame.MOUSEMOTION:
-                if event.buttons[0]:
-                    if event.pos[0] >= SCREEN_WIDTH:
-                        rel_x = event.pos[0] - SCREEN_WIDTH
-                        if sound_bar_rect and sound_bar_rect.collidepoint(rel_x, event.pos[1]):
-                            new_volume = (rel_x - sound_bar_rect.x) / sound_bar_rect.width
-                            pygame.mixer.music.set_volume(new_volume)
-            elif event.type == pygame.KEYDOWN:
-                if event.key == controls['left']:
-                    left_pressed = True
-                    new_x = offset[0] - 1
-                    if valid_position(tetromino, [new_x, offset[1]], grid):
-                        offset[0] = new_x
-                    last_horizontal_move = current_time
-                elif event.key == controls['right']:
-                    right_pressed = True
-                    new_x = offset[0] + 1
-                    if valid_position(tetromino, [new_x, offset[1]], grid):
-                        offset[0] = new_x
-                    last_horizontal_move = current_time
-                elif event.key == controls['down']:
-                    fast_fall = True
-                elif event.key == controls['rotate']:
-                    rotated, new_offset = rotate_tetromino_with_kick(tetromino, offset, grid)
-                    tetromino, offset = rotated, new_offset
-                elif event.key == controls.get('hold', pygame.K_c):
-                    if not hold_used:
-                        hold_used = True
-                        if hold_piece is None:
-                            hold_piece = copy.deepcopy(tetromino)
-                            tetromino = tetromino_bag.get_next_tetromino()
-                            shape_index = get_shape_index(tetromino)
-                            if shape_index is None:
-                                shape_index = 0
-                            color_index = (shape_index + level - 1) % len(COLORS) + 1
-                            offset = [GRID_WIDTH//2 - len(tetromino[0])//2, 0]
-                        else:
-                            tetromino, hold_piece = copy.deepcopy(hold_piece), copy.deepcopy(tetromino)
-                            shape_index = get_shape_index(tetromino)
-                            if shape_index is None:
-                                shape_index = 0
-                            color_index = (shape_index + level - 1) % len(COLORS) + 1
-                            offset = [GRID_WIDTH//2 - len(tetromino[0])//2, 0]
-                elif event.key == controls['pause']:
-                    pause_game()
-                elif event.key == controls['hard_drop']:
-                    # Process hard drop immediately:
-                    hard_drop_rows = 0
-                    temp_offset = offset.copy()
-                    while valid_position(tetromino, [temp_offset[0], temp_offset[1] + 1], grid):
-                        temp_offset[1] += 1
-                        hard_drop_rows += 1
-                    offset[1] = temp_offset[1]
-                    score += hard_drop_rows * 2
-                    for _ in range(20 + hard_drop_rows * 5):
-                        dust_particles.append(DustParticle(
-                            (offset[0] + random.uniform(-1, len(tetromino[0]) + 1)) * BLOCK_SIZE,
-                            (offset[1] + len(tetromino)) * BLOCK_SIZE
-                        ))
-                    if check_game_over(grid):
-                        game_over = True
-                    else:
-                        original_grid = [row[:] for row in grid]
-                        place_tetromino(tetromino, offset, grid, color_index)
-                        hold_used = False
-                        grid, lines_cleared = clear_lines(grid)
-                        lines_cleared_total += lines_cleared
-                        score = update_score(score, lines_cleared)
-                        pieces_dropped += 1
-                        if lines_cleared > 0:
-                            screen_shake = 8 + lines_cleared * 3
-                            full_lines = [y for y in range(GRID_HEIGHT) if all(original_grid[y])]
-                            for y in full_lines:
-                                for x in range(GRID_WIDTH):
-                                    if original_grid[y][x] != 0:
-                                        explosion_particles.append(Explosion(
-                                            x * BLOCK_SIZE + BLOCK_SIZE // 2,
-                                            y * BLOCK_SIZE + BLOCK_SIZE // 2,
-                                            COLORS[original_grid[y][x] - 1],
-                                            particle_count=45,
-                                            max_speed=15,
-                                            duration=75
-                                        ))
-                        if lines_cleared == 4:
-                            is_tetris = True
-                            tetris_last_flash = current_time
-                        new_level = lines_cleared_total // 10 + 1
-                        if new_level > level:
-                            level = new_level
-                            fall_speed = max(50, int(base_fall_speed * (0.85 ** (level - 1))))
-                            in_level_transition = True
-                            transition_start_time = current_time
-                            last_flash_time = current_time
-                            flash_count = 0
-                        tetromino = next_tetromino
-                        shape_index = get_shape_index(tetromino) or 0
-                        color_index = (shape_index + level - 1) % len(COLORS) + 1
-                        next_tetromino = tetromino_bag.get_next_tetromino()
-                        offset = [GRID_WIDTH//2 - len(tetromino[0])//2, 0]
-            elif event.type == pygame.KEYUP:
-                if event.key == controls['left']:
-                    left_pressed = False
-                elif event.key == controls['right']:
-                    right_pressed = False
-                elif event.key == controls['down']:
-                    fast_fall = False
-            # --- Joypad Input Handling (events) ---
-            elif event.type == pygame.JOYBUTTONDOWN:
-                # Map joypad buttons:
-                # Button 0: Rotate; Button 1: Hard Drop; Button 2: Hold; Button 7: Pause.
-                if event.button == 0:
-                    rotated, new_offset = rotate_tetromino_with_kick(tetromino, offset, grid)
-                    tetromino, offset = rotated, new_offset
-                elif event.button == 1:
-                    # Hard drop for joypad.
-                    hard_drop_rows = 0
-                    temp_offset = offset.copy()
-                    while valid_position(tetromino, [temp_offset[0], temp_offset[1] + 1], grid):
-                        temp_offset[1] += 1
-                        hard_drop_rows += 1
-                    offset[1] = temp_offset[1]
-                    score += hard_drop_rows * 2
-                    for _ in range(20 + hard_drop_rows * 5):
-                        dust_particles.append(DustParticle(
-                            (offset[0] + random.uniform(-1, len(tetromino[0]) + 1)) * BLOCK_SIZE,
-                            (offset[1] + len(tetromino)) * BLOCK_SIZE
-                        ))
-                    if check_game_over(grid):
-                        game_over = True
-                    else:
-                        original_grid = [row[:] for row in grid]
-                        place_tetromino(tetromino, offset, grid, color_index)
-                        hold_used = False
-                        grid, lines_cleared = clear_lines(grid)
-                        lines_cleared_total += lines_cleared
-                        score = update_score(score, lines_cleared)
-                        pieces_dropped += 1
-                        if lines_cleared > 0:
-                            screen_shake = 8 + lines_cleared * 3
-                            full_lines = [y for y in range(GRID_HEIGHT) if all(original_grid[y])]
-                            for y in full_lines:
-                                for x in range(GRID_WIDTH):
-                                    if original_grid[y][x] != 0:
-                                        explosion_particles.append(Explosion(
-                                            x * BLOCK_SIZE + BLOCK_SIZE // 2,
-                                            y * BLOCK_SIZE + BLOCK_SIZE // 2,
-                                            COLORS[original_grid[y][x] - 1],
-                                            particle_count=45,
-                                            max_speed=15,
-                                            duration=75
-                                        ))
-                        if lines_cleared == 4:
-                            is_tetris = True
-                            tetris_last_flash = current_time
-                        new_level = lines_cleared_total // 10 + 1
-                        if new_level > level:
-                            level = new_level
-                            fall_speed = max(50, int(base_fall_speed * (0.85 ** (level - 1))))
-                            in_level_transition = True
-                            transition_start_time = current_time
-                            last_flash_time = current_time
-                            flash_count = 0
-                        tetromino = next_tetromino
-                        shape_index = get_shape_index(tetromino) or 0
-                        color_index = (shape_index + level - 1) % len(COLORS) + 1
-                        next_tetromino = tetromino_bag.get_next_tetromino()
-                        offset = [GRID_WIDTH//2 - len(tetromino[0])//2, 0]
-                elif event.button == 2:
-                    if not hold_used:
-                        hold_used = True
-                        if hold_piece is None:
-                            hold_piece = copy.deepcopy(tetromino)
-                            tetromino = tetromino_bag.get_next_tetromino()
-                        else:
-                            temp = copy.deepcopy(tetromino)
-                            tetromino = copy.deepcopy(hold_piece)
-                            hold_piece = temp
-                        offset = [GRID_WIDTH//2 - len(tetromino[0])//2, 0]
-                        shape_index = get_shape_index(tetromino) or 0
-                        color_index = (shape_index + level - 1) % len(COLORS) + 1
-                elif event.button == 7:
-                    pause_game()
-            # End event processing.
-
-            elif event.type == pygame.JOYAXISMOTION or event.type == pygame.JOYHATMOTION:
-                # We will handle continuous joypad input by polling below.
-                pass
-
+        # --- Process Events ---
+        handle_events(current_time)
+        
+        # Check if a button command was issued
+        if game_command == "restart" or game_command == "menu":
+            return  # Exit run_game() to restart or return to the main menu.
+        elif game_command == "skip":
+            skip_current_track()   # Change the track.
+            game_command = None      # Reset the command so we don't repeatedly skip.
+            
         # --- Poll Joypad for Continuous Movement ---
         if joy is not None:
             # Horizontal movement:
@@ -1968,8 +2276,8 @@ def run_game():
                     next_tetromino = tetromino_bag.get_next_tetromino()
                     offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
             last_fall_time = current_time
-
-        # --- Particle Updates ---
+            
+        # Spawn flame trail particles when moving or fast falling.
         if flame_trails_enabled and (left_pressed or right_pressed or fast_fall):
             num_particles = random.randint(3, 5)
             spawn_offset = 15
@@ -1982,25 +2290,18 @@ def run_game():
                     direction = "right"
                     spawn_x = (offset[0] + len(tetromino[0])) * BLOCK_SIZE + random.randint(0, spawn_offset)
                     spawn_y = (offset[1] + random.uniform(0.2, 0.8) * len(tetromino)) * BLOCK_SIZE
-                else:
+                else:  # For fast falling (vertical movement)
                     direction = "down"
-                    spawn_x = (offset[0] + random.uniform(0.2, 0.8) * len(tetromino[0])) * BLOCK_SIZE
-                    spawn_y = (offset[1] + len(tetromino)) * BLOCK_SIZE - spawn_offset
-                trail_particles.append(TrailParticle(spawn_x, spawn_y, direction))
+                spawn_x = (offset[0] + random.uniform(0.2, 0.8) * len(tetromino[0])) * BLOCK_SIZE
+                spawn_y = (offset[1] + len(tetromino)) * BLOCK_SIZE - spawn_offset
+            trail_particles.append(TrailParticle(spawn_x, spawn_y, direction))
+
+        # --- Update Particles ---
         wind_force = ((-4.0 if left_pressed else 4.0 if right_pressed else 0),
-                      (5.0 if fast_fall else 0))
-        for particle in trail_particles[:]:
-            particle.update(wind_force, screen)
-            if particle.age >= particle.max_age:
-                trail_particles.remove(particle)
-        for particle in dust_particles[:]:
-            particle.update()
-            if particle.age >= particle.max_age:
-                dust_particles.remove(particle)
-        for explosion in explosion_particles[:]:
-            explosion.update()
-            if explosion.lifetime <= 0:
-                explosion_particles.remove(explosion)
+                    (5.0 if fast_fall else 0))
+        update_particles(wind_force)
+
+        # --- Update Screen Shake ---
         screen_shake = max(0, screen_shake - 1)
 
         # --- Danger Zone (Heartbeat) ---
@@ -2012,6 +2313,9 @@ def run_game():
             if heartbeat_playing and heartbeat_sound:
                 heartbeat_sound.stop()
                 heartbeat_playing = False
+
+        # --- Draw Everything ---
+        draw_game(shake_x, shake_y)
 
         clock.tick(60)
         
