@@ -1131,11 +1131,14 @@ def options_menu():
                 text = f"Use Custom Music: {'On' if settings.get('use_custom_music', False) else 'Off'}"
             elif key == 'select_music_dir':
                 dir_display = settings.get('music_directory', '')
-                text = f"Dir: {dir_display}" if dir_display else "Select Music Directory: Not Selected"
+                text = f"Dir: {dir_display}" if dir_display else "Music Dir: Not Selected"
             option_text = tetris_font_medium.render(text, True, color)
-            # Optionally scale the text for select_music_dir.
-            if key == 'select_music_dir' and settings.get('music_directory', ''):
-                scale_factor = 0.6
+            # Scale the text for select_music_dir based on whether a valid path is set.
+            if key == 'select_music_dir':
+                if settings.get('music_directory', ''):
+                    scale_factor = 0.6  # When a valid music directory is set.
+                else:
+                    scale_factor = 1.0  # When no valid music directory is set.
                 scaled_width = int(option_text.get_width() * scale_factor)
                 scaled_height = int(option_text.get_height() * scale_factor)
                 option_text = pygame.transform.scale(option_text, (scaled_width, scaled_height))
