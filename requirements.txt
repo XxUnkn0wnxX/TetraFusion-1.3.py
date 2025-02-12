@@ -1,3 +1,0 @@
-pygame>=2.0.0
-mutagen>=1.45.1
-pyobjc>=8.0; sys_platform=="darwin"
