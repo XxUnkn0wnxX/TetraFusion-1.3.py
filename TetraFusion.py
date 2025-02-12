@@ -313,6 +313,12 @@ def load_settings(filename="settings.json"):
             "pause": None,
             "skip_track": None
         },
+        "controller_menu_navigation": {
+        "up": None,
+        "down": None,
+        "select": None,
+        "back": None
+    },
         "difficulty": "normal",
         "flame_trails": True,
         "grid_color": [200, 200, 200],
@@ -335,6 +341,7 @@ def load_settings(filename="settings.json"):
         # Ensure required keys exist:
         saved_settings.setdefault("controls", {})
         saved_settings.setdefault("controller_controls", default_settings["controller_controls"])
+        saved_settings.setdefault("controller_menu_navigation", default_settings["controller_menu_navigation"])
 
         # Convert string keys back to pygame key constants for controls.
         for key, default_value in default_settings["controls"].items():
@@ -369,6 +376,7 @@ def save_settings(settings, filename="settings.json"):
         settings_to_save = {
             "controls": {control: pygame.key.name(key).upper() for control, key in settings["controls"].items()},
             "controller_controls": {control: settings["controller_controls"].get(control) for control in settings.get("controller_controls", {})},
+            "controller_menu_navigation": {control: settings["controller_menu_navigation"].get(control) for control in settings.get("controller_menu_navigation", {})},
             "difficulty": settings.get("difficulty", "normal"),
             "flame_trails": settings.get("flame_trails", True),
             "grid_color": settings.get("grid_color", [200, 200, 200]),
@@ -1074,8 +1082,12 @@ def options_menu():
                     current_key = options[selected_option][0]
                     if current_key == 'keybinds':
                         keyboard_keybinds_menu()
+                        enter_pressed = False
+                        pygame.event.clear()
                     elif current_key == 'controller_keybinds':
                         controller_keybinds_menu()
+                        enter_pressed = False
+                        pygame.event.clear()
                     elif current_key in settings['controls']:
                         changing_key = current_key
                     elif current_key == 'difficulty':
@@ -1215,6 +1227,7 @@ def keyboard_keybinds_menu():
             elif event.type == pygame.KEYUP:
                 pass
 
+# Options Controller Controls
 def controller_keybinds_menu():
     selected_option = 0
     changing_button = None
@@ -1228,11 +1241,13 @@ def controller_keybinds_menu():
             'rotate': None,
             'hard_drop': None,
             'hold': None,
-            'pause': None
+            'pause': None,
+            'skip_track': None
         }
 
-    # List of controller keybind options.
+    # Define your controller options with non-bindable items first.
     controller_options = [
+        ('controller_menu_keybinds', 'Menu Nav Bindings'),
         ('left', 'Move Left'),
         ('right', 'Move Right'),
         ('down', 'Soft Drop'),
@@ -1243,6 +1258,9 @@ def controller_keybinds_menu():
         ('back', 'Back to Options')
     ]
     
+    # Define which keys are actually bindable.
+    bindable_keys = {"left", "right", "down", "rotate", "hard_drop", "hold", "pause", "skip_track"}
+
     option_spacing = 45
     base_y = 150  # starting vertical position for options
 
@@ -1252,20 +1270,24 @@ def controller_keybinds_menu():
         scaled_title = pygame.transform.scale(title_text, (int(title_text.get_width() * 0.8), int(title_text.get_height() * 0.8)))
         screen.blit(scaled_title, (SCREEN_WIDTH // 2 - scaled_title.get_width() // 2, 50))
         
-        # Render each controller option, displaying the current binding if set.
+        # Render each option.
         for i, (key, label) in enumerate(controller_options):
             color = RED if i == selected_option else WHITE
-            if key in settings['controller_controls'] and settings['controller_controls'][key] is not None:
-                display_text = f"{label}: Button {settings['controller_controls'][key]}"
+            if key in bindable_keys:
+                current_binding = settings['controller_controls'].get(key)
+                # If there's a binding, show it. Otherwise, just show the label.
+                if current_binding is not None:
+                    display_text = f"{label}: Button {current_binding}"
+                else:
+                    display_text = label
             else:
-                display_text = label
+                display_text = label  # Non-bindable options: just display the label.
             option_text = tetris_font_medium.render(display_text, True, color)
             y_coordinate = base_y + i * option_spacing
             screen.blit(option_text, (SCREEN_WIDTH // 2 - option_text.get_width() // 2, y_coordinate))
         
         pygame.display.flip()
-        
-        # Event handling
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 save_settings(settings)
@@ -1277,7 +1299,7 @@ def controller_keybinds_menu():
                 # ESC cancels a pending binding or exits the menu.
                 if event.key == pygame.K_ESCAPE:
                     if changing_button is not None:
-                        changing_button = None  # Cancel pending binding
+                        changing_button = None  # Cancel pending binding.
                     else:
                         return
                 # If a binding is pending, ignore other keyboard input.
@@ -1289,15 +1311,117 @@ def controller_keybinds_menu():
                     elif event.key == pygame.K_DOWN:
                         selected_option = (selected_option + 1) % len(controller_options)
                     elif event.key == pygame.K_RETURN:
-                        if controller_options[selected_option][0] == 'back':
+                        current_option = controller_options[selected_option][0]
+                        if current_option == 'back':
                             return
+                        elif current_option == 'controller_menu_keybinds':
+                            controller_menu_nav_menu()
+                            enter_pressed = False
+                            pygame.event.clear()
                         else:
-                            # Trigger capture mode for a controller input.
-                            changing_button = controller_options[selected_option][0]
+                            # Trigger capture mode for the selected controller input.
+                            changing_button = current_option
             elif event.type == pygame.JOYBUTTONDOWN:
                 # Only capture controller input when in binding capture mode.
                 if changing_button is not None:
                     settings['controller_controls'][changing_button] = event.button
+                    changing_button = None
+            elif event.type == pygame.KEYUP:
+                pass
+
+# Options Controller Menu Keybinds
+def controller_menu_nav_menu():
+    selected_option = 0
+    changing_button = None
+
+    # Ensure the "controller_menu_navigation" settings exist.
+    if "controller_menu_navigation" not in settings:
+        settings["controller_menu_navigation"] = {
+            "up": None,
+            "down": None,
+            "left": None,
+            "right": None,
+            "select": None,
+            "back": None
+        }
+
+    # Define menu navigation options.
+    # The first four options are bindable; the final option ("exit") is non-bindable.
+    menu_nav_options = [
+        ("up", "Menu Up"),
+        ("down", "Menu Down"),
+        ("select", "Menu Select"),
+        ("back", "Menu Back"),
+        ("exit", "Back to Controller Keybinds")
+    ]
+    
+    # Define which keys are bindable.
+    bindable_keys = {"up", "down", "select", "back"}
+
+    option_spacing = 45
+    base_y = 150  # Starting vertical position for the options
+
+    while True:
+        screen.fill(BLACK)
+        title_text = tetris_font_large.render("Menu Nav Bindings", True, WHITE)
+        scaled_title = pygame.transform.scale(title_text, (int(title_text.get_width() * 0.8), int(title_text.get_height() * 0.8)))
+        screen.blit(scaled_title, (SCREEN_WIDTH // 2 - scaled_title.get_width() // 2, 50))
+        
+        # Render each menu navigation option.
+        for i, (key, label) in enumerate(menu_nav_options):
+            color = RED if i == selected_option else WHITE
+            if key in bindable_keys:
+                current_binding = settings["controller_menu_navigation"].get(key)
+                # If a binding exists, show it; otherwise, display just the label.
+                if current_binding is not None:
+                    display_text = f"{label}: Button {current_binding}"
+                else:
+                    display_text = label
+            else:
+                display_text = label  # For non-bindable options.
+            
+            option_text = tetris_font_medium.render(display_text, True, color)
+            # If this is the "exit" option, scale it.
+            if key == "exit":
+                option_text = pygame.transform.scale(option_text, (int(option_text.get_width() * 0.85),
+                                                                     int(option_text.get_height() * 0.85)))
+            y_coordinate = base_y + i * option_spacing
+            screen.blit(option_text, (SCREEN_WIDTH // 2 - option_text.get_width() // 2, y_coordinate))
+            
+        pygame.display.flip()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                save_settings(settings)
+                pygame.quit()
+                sys.exit()
+            elif event.type == MUSIC_END_EVENT:
+                handle_music_end_event()
+            elif event.type == pygame.KEYDOWN:
+                # ESC cancels a pending binding or exits the submenu.
+                if event.key == pygame.K_ESCAPE:
+                    if changing_button is not None:
+                        changing_button = None  # Cancel pending binding.
+                    else:
+                        return
+                # If a binding capture is active, ignore other keyboard input.
+                elif changing_button is not None:
+                    pass
+                else:
+                    if event.key == pygame.K_UP:
+                        selected_option = (selected_option - 1) % len(menu_nav_options)
+                    elif event.key == pygame.K_DOWN:
+                        selected_option = (selected_option + 1) % len(menu_nav_options)
+                    elif event.key == pygame.K_RETURN:
+                        current_option = menu_nav_options[selected_option][0]
+                        if current_option == "exit":
+                            return
+                        else:
+                            # Enter binding capture mode for the chosen menu navigation option.
+                            changing_button = current_option
+            elif event.type == pygame.JOYBUTTONDOWN:
+                if changing_button is not None:
+                    settings["controller_menu_navigation"][changing_button] = event.button
                     changing_button = None
             elif event.type == pygame.KEYUP:
                 pass
