@@ -44,19 +44,18 @@ def load_sound(file_path):
 
 def get_music_files(directory):
     """
-    Search the given directory (non-recursively) for valid audio files.
+    Recursively search the given directory for valid audio files.
     Uses both file extension checking and Mutagen to ensure the file is playable.
     Returns a sorted list of valid file paths.
     """
     music_files = []
     unsupported_files = []
 
-    for item in os.listdir(directory):
-        if item.startswith('.'):
-            continue  # Ignore hidden files
-        full_path = os.path.join(directory, item)
-
-        if os.path.isfile(full_path):
+    for root, dirs, files in os.walk(directory):
+        for item in files:
+            if item.startswith('.'):
+                continue  # Ignore hidden files
+            full_path = os.path.join(root, item)
             ext = os.path.splitext(full_path)[1].lower()
             
             # Check if file extension is a known audio format
@@ -1020,7 +1019,12 @@ def options_menu():
                     elif current_key == 'flame_trails':
                         settings['flame_trails'] = not settings['flame_trails']
                     elif current_key == 'grid_opacity':
-                        settings['grid_opacity'] = (settings['grid_opacity'] + 64) % 256
+                        if settings['grid_opacity'] < 255:
+                            # Add 64, but cap the value at 255.
+                                new_opacity = settings['grid_opacity'] + 64
+                                settings['grid_opacity'] = new_opacity if new_opacity <= 255 else 255
+                        else:
+                            settings['grid_opacity'] = 0
                     elif current_key == 'grid_lines':
                         settings['grid_lines'] = not settings.get('grid_lines', True)
                     elif current_key == 'ghost_piece':
