@@ -1,4 +1,4 @@
-# Game Ver 1.9.3
+# Game Ver 1.9.3.1
 # Dependencies: pip install mutagen
 
 import pygame
@@ -17,7 +17,7 @@ pygame.init()
 pygame.mixer.set_num_channels(32)
 pygame.mixer.init()
 
-GAME_CAPTION = "TetraFusion 1.9.3"  # Moved to top
+GAME_CAPTION = "TetraFusion 1.9.3.1"  # Moved to top
 
 last_track_index = None  # Stores the current track index at game over.
 
