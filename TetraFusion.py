@@ -1168,7 +1168,6 @@ def place_tetromino(tetromino, offset, grid, color_index):
                 if 0 <= x < GRID_WIDTH and 0 <= y < GRID_HEIGHT:
                     grid[y][x] = color_index
 
-
 # -------------------------- Game Loop --------------------------
 def run_game():
     global high_score, high_score_name, subwindow_visible, last_click_time, settings, heartbeat_playing, game_command
@@ -1243,6 +1242,87 @@ def run_game():
     # For joypad continuous movement, set a rate–limit.
     last_joy_move = pygame.time.get_ticks()
     joy_delay = 150  # milliseconds
+    
+    # -------------------------- Game Helpers --------------------------
+
+    def perform_hard_drop():
+        nonlocal tetromino, offset, score, game_over, grid, lines_cleared_total
+        global hold_used  # Use global for hold_used since it's declared as global in run_game()
+        nonlocal pieces_dropped, screen_shake, is_tetris, tetris_last_flash, level
+        nonlocal fall_speed, transition_start_time, last_flash_time, flash_count
+        nonlocal next_tetromino, shape_index, color_index, tetromino_bag, current_time
+
+        # Calculate how far the tetromino can fall
+        hard_drop_rows = 0
+        temp_offset = offset.copy()
+        while valid_position(tetromino, [temp_offset[0], temp_offset[1] + 1], grid):
+            temp_offset[1] += 1
+            hard_drop_rows += 1
+        offset[1] = temp_offset[1]
+    
+        # Update score based on drop distance
+        score += hard_drop_rows * 2
+    
+        # Generate dust particles for visual effect
+        for _ in range(20 + hard_drop_rows * 5):
+            dust_particles.append(DustParticle(
+                (offset[0] + random.uniform(-1, len(tetromino[0]) + 1)) * BLOCK_SIZE,
+                (offset[1] + len(tetromino)) * BLOCK_SIZE
+            ))
+    
+        # Check if dropping results in game over
+        if check_game_over(grid):
+            game_over = True
+            return
+    
+        # Lock tetromino: record its position and update grid
+        original_grid = [row[:] for row in grid]
+        place_tetromino(tetromino, offset, grid, color_index)
+        hold_used = False
+        grid, lines_cleared = clear_lines(grid)
+        lines_cleared_total += lines_cleared
+        score = update_score(score, lines_cleared)
+        pieces_dropped += 1
+    
+        # If any lines are cleared, trigger screen shake and explosion effects
+        if lines_cleared > 0:
+            screen_shake = 8 + lines_cleared * 3
+            full_lines = [y for y in range(GRID_HEIGHT) if all(original_grid[y])]
+            for y in full_lines:
+                for x in range(GRID_WIDTH):
+                    if original_grid[y][x] != 0:
+                        explosion_particles.append(Explosion(
+                            x * BLOCK_SIZE + BLOCK_SIZE // 2,
+                            y * BLOCK_SIZE + BLOCK_SIZE // 2,
+                            COLORS[original_grid[y][x] - 1],
+                            particle_count=45,
+                            max_speed=15,
+                            duration=75
+                        ))
+    
+        # Check for a Tetris (clearing 4 lines)
+        if lines_cleared == 4:
+            is_tetris = True
+            tetris_last_flash = current_time
+    
+        # Level up if enough lines have been cleared
+        new_level = lines_cleared_total // 10 + 1
+        if new_level > level:
+            level = new_level
+            fall_speed = max(50, int(base_fall_speed * (0.85 ** (level - 1))))
+            in_level_transition = True
+            transition_start_time = current_time
+            last_flash_time = current_time
+            flash_count = 0
+    
+        # Update tetromino for next piece
+        tetromino = next_tetromino
+        shape_index = get_shape_index(tetromino) or 0
+        color_index = (shape_index + level - 1) % len(COLORS) + 1
+        next_tetromino = tetromino_bag.get_next_tetromino()
+        offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
+        
+# -------------------------- Continue Game Loop --------------------------
 
     while True:
         current_time = pygame.time.get_ticks()
@@ -1408,60 +1488,9 @@ def run_game():
                             offset = [GRID_WIDTH//2 - len(tetromino[0])//2, 0]
                 elif event.key == controls['pause']:
                     pause_game()
+                # new hard drop logic    
                 elif event.key == controls['hard_drop']:
-                    # Process hard drop immediately:
-                    hard_drop_rows = 0
-                    temp_offset = offset.copy()
-                    while valid_position(tetromino, [temp_offset[0], temp_offset[1] + 1], grid):
-                        temp_offset[1] += 1
-                        hard_drop_rows += 1
-                    offset[1] = temp_offset[1]
-                    score += hard_drop_rows * 2
-                    for _ in range(20 + hard_drop_rows * 5):
-                        dust_particles.append(DustParticle(
-                            (offset[0] + random.uniform(-1, len(tetromino[0]) + 1)) * BLOCK_SIZE,
-                            (offset[1] + len(tetromino)) * BLOCK_SIZE
-                        ))
-                    if check_game_over(grid):
-                        game_over = True
-                    else:
-                        original_grid = [row[:] for row in grid]
-                        place_tetromino(tetromino, offset, grid, color_index)
-                        hold_used = False
-                        grid, lines_cleared = clear_lines(grid)
-                        lines_cleared_total += lines_cleared
-                        score = update_score(score, lines_cleared)
-                        pieces_dropped += 1
-                        if lines_cleared > 0:
-                            screen_shake = 8 + lines_cleared * 3
-                            full_lines = [y for y in range(GRID_HEIGHT) if all(original_grid[y])]
-                            for y in full_lines:
-                                for x in range(GRID_WIDTH):
-                                    if original_grid[y][x] != 0:
-                                        explosion_particles.append(Explosion(
-                                            x * BLOCK_SIZE + BLOCK_SIZE // 2,
-                                            y * BLOCK_SIZE + BLOCK_SIZE // 2,
-                                            COLORS[original_grid[y][x] - 1],
-                                            particle_count=45,
-                                            max_speed=15,
-                                            duration=75
-                                        ))
-                        if lines_cleared == 4:
-                            is_tetris = True
-                            tetris_last_flash = current_time
-                        new_level = lines_cleared_total // 10 + 1
-                        if new_level > level:
-                            level = new_level
-                            fall_speed = max(50, int(base_fall_speed * (0.85 ** (level - 1))))
-                            in_level_transition = True
-                            transition_start_time = current_time
-                            last_flash_time = current_time
-                            flash_count = 0
-                        tetromino = next_tetromino
-                        shape_index = get_shape_index(tetromino) or 0
-                        color_index = (shape_index + level - 1) % len(COLORS) + 1
-                        next_tetromino = tetromino_bag.get_next_tetromino()
-                        offset = [GRID_WIDTH//2 - len(tetromino[0])//2, 0]
+                    perform_hard_drop()
             elif event.type == pygame.KEYUP:
                 if event.key == controls['left']:
                     left_pressed = False
@@ -1476,60 +1505,9 @@ def run_game():
                 if event.button == 0:
                     rotated, new_offset = rotate_tetromino_with_kick(tetromino, offset, grid)
                     tetromino, offset = rotated, new_offset
+                # new hard drop logic
                 elif event.button == 1:
-                    # Hard drop for joypad.
-                    hard_drop_rows = 0
-                    temp_offset = offset.copy()
-                    while valid_position(tetromino, [temp_offset[0], temp_offset[1] + 1], grid):
-                        temp_offset[1] += 1
-                        hard_drop_rows += 1
-                    offset[1] = temp_offset[1]
-                    score += hard_drop_rows * 2
-                    for _ in range(20 + hard_drop_rows * 5):
-                        dust_particles.append(DustParticle(
-                            (offset[0] + random.uniform(-1, len(tetromino[0]) + 1)) * BLOCK_SIZE,
-                            (offset[1] + len(tetromino)) * BLOCK_SIZE
-                        ))
-                    if check_game_over(grid):
-                        game_over = True
-                    else:
-                        original_grid = [row[:] for row in grid]
-                        place_tetromino(tetromino, offset, grid, color_index)
-                        hold_used = False
-                        grid, lines_cleared = clear_lines(grid)
-                        lines_cleared_total += lines_cleared
-                        score = update_score(score, lines_cleared)
-                        pieces_dropped += 1
-                        if lines_cleared > 0:
-                            screen_shake = 8 + lines_cleared * 3
-                            full_lines = [y for y in range(GRID_HEIGHT) if all(original_grid[y])]
-                            for y in full_lines:
-                                for x in range(GRID_WIDTH):
-                                    if original_grid[y][x] != 0:
-                                        explosion_particles.append(Explosion(
-                                            x * BLOCK_SIZE + BLOCK_SIZE // 2,
-                                            y * BLOCK_SIZE + BLOCK_SIZE // 2,
-                                            COLORS[original_grid[y][x] - 1],
-                                            particle_count=45,
-                                            max_speed=15,
-                                            duration=75
-                                        ))
-                        if lines_cleared == 4:
-                            is_tetris = True
-                            tetris_last_flash = current_time
-                        new_level = lines_cleared_total // 10 + 1
-                        if new_level > level:
-                            level = new_level
-                            fall_speed = max(50, int(base_fall_speed * (0.85 ** (level - 1))))
-                            in_level_transition = True
-                            transition_start_time = current_time
-                            last_flash_time = current_time
-                            flash_count = 0
-                        tetromino = next_tetromino
-                        shape_index = get_shape_index(tetromino) or 0
-                        color_index = (shape_index + level - 1) % len(COLORS) + 1
-                        next_tetromino = tetromino_bag.get_next_tetromino()
-                        offset = [GRID_WIDTH//2 - len(tetromino[0])//2, 0]
+                    perform_hard_drop()
                 elif event.button == 2:
                     if not hold_used:
                         hold_used = True
