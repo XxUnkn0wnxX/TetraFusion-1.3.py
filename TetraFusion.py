@@ -1244,13 +1244,15 @@ def run_game():
     joy_delay = 150  # milliseconds
     
     # -------------------------- Game Helpers --------------------------
-
-    def lock_and_update_tetromino():
+    
+    # tetromino Logic (hold etc..)
+    def lock_and_update_tetromino(current_time):
         nonlocal tetromino, offset, score, game_over, grid, lines_cleared_total
-        global hold_used  # Use global for hold_used since it's declared as global in run_game()
+        global hold_used
         nonlocal pieces_dropped, screen_shake, is_tetris, tetris_last_flash, level
         nonlocal fall_speed, transition_start_time, last_flash_time, flash_count
-        nonlocal next_tetromino, shape_index, color_index, tetromino_bag, current_time
+        nonlocal next_tetromino, shape_index, color_index, tetromino_bag
+        # Now use current_time as a parameter inside the function.
 
         # Calculate how far the tetromino can fall
         hard_drop_rows = 0
@@ -1321,7 +1323,8 @@ def run_game():
         color_index = (shape_index + level - 1) % len(COLORS) + 1
         next_tetromino = tetromino_bag.get_next_tetromino()
         offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
-        
+    
+    # All events stored here now
     def handle_events(current_time):
         # Declare all run_game() local variables you'll modify:
         nonlocal left_pressed, right_pressed, fast_fall, offset, tetromino, last_horizontal_move, shape_index, color_index, score, next_tetromino, tetris_last_flash
@@ -1378,7 +1381,7 @@ def run_game():
                 elif event.key == controls['pause']:
                     pause_game()
                 elif event.key == controls['hard_drop']:
-                    lock_and_update_tetromino()
+                    lock_and_update_tetromino(current_time)
             elif event.type == pygame.KEYUP:
                 if event.key == controls['left']:
                     left_pressed = False
@@ -1392,7 +1395,7 @@ def run_game():
                     rotated, new_offset = rotate_tetromino_with_kick(tetromino, offset, grid)
                     tetromino, offset = rotated, new_offset
                 elif event.button == 1:  # Hard drop
-                    lock_and_update_tetromino()
+                    lock_and_update_tetromino(current_time)
                 elif event.button == 2:  # Hold
                     if not hold_used:
                         hold_used = True
@@ -1434,6 +1437,85 @@ def run_game():
                         if sound_bar_rect and sound_bar_rect.collidepoint(rel_x, event.pos[1]):
                             new_volume = (rel_x - sound_bar_rect.x) / sound_bar_rect.width
                             pygame.mixer.music.set_volume(new_volume)
+    
+    # Drawing related stuff
+    def draw_game(shake_x, shake_y):
+        # Clear screen and draw grid surface
+        screen.fill(BLACK)
+        screen.blit(grid_surface, (shake_x, shake_y))
+    
+        if not in_level_transition:
+            # Draw grid blocks and grid lines
+            for y in range(GRID_HEIGHT):
+                for x in range(GRID_WIDTH):
+                    if grid[y][x]:
+                        draw_3d_block(screen, COLORS[grid[y][x] - 1],
+                                    x * BLOCK_SIZE + shake_x,
+                                    y * BLOCK_SIZE + shake_y,
+                                    BLOCK_SIZE)
+                    if settings.get('grid_lines', True):
+                        pygame.draw.rect(screen, grid_color,
+                                        (x * BLOCK_SIZE + shake_x,
+                                        y * BLOCK_SIZE + shake_y,
+                                        BLOCK_SIZE, BLOCK_SIZE), 1)
+            # Draw ghost piece if enabled
+            if settings.get('ghost_piece', True):
+                draw_ghost_piece(tetromino, offset, grid)
+            # Draw the current tetromino
+            for cy, row in enumerate(tetromino):
+                for cx, cell in enumerate(row):
+                    if cell:
+                        draw_3d_block(screen, COLORS[color_index - 1],
+                                    (offset[0] + cx) * BLOCK_SIZE + shake_x,
+                                    (offset[1] + cy) * BLOCK_SIZE + shake_y,
+                                    BLOCK_SIZE)
+            # Draw explosions, trail particles, and dust particles
+            for explosion in explosion_particles:
+                explosion.draw(screen, (shake_x, shake_y))
+            for particle in trail_particles:
+                particle.draw(screen)
+            for particle in dust_particles:
+                particle.draw(screen)
+        else:
+            # If in level transition, draw grid blocks with overlay
+            for y in range(GRID_HEIGHT):
+                for x in range(GRID_WIDTH):
+                    if grid[y][x]:
+                        draw_3d_block(screen, COLORS[grid[y][x] - 1],
+                                    x * BLOCK_SIZE + shake_x,
+                                    y * BLOCK_SIZE + shake_y,
+                                    BLOCK_SIZE)
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
+            overlay.set_alpha(128)
+            overlay.fill(BLACK)
+            screen.blit(overlay, (0, 0))
+            level_text = tetris_font_large.render(f"LEVEL {level}", True, random.choice(COLORS))
+            level_shake_x = random.randint(-10, 10)
+            level_shake_y = random.randint(-10, 10)
+            screen.blit(level_text, (SCREEN_WIDTH//2 - level_text.get_width()//2 + level_shake_x,
+                                    SCREEN_HEIGHT//2 - level_text.get_height()//2 + level_shake_y))
+        # Draw subwindow with game info
+        draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_total,
+                    is_tetris, tetris_last_flash, tetris_flash_time)
+        pygame.display.flip()
+    
+    # Particle Updater
+    def update_particles(wind_force):
+        # Update and remove trail particles
+        for particle in trail_particles[:]:
+            particle.update(wind_force, screen)
+            if particle.age >= particle.max_age:
+                trail_particles.remove(particle)
+        # Update and remove dust particles
+        for particle in dust_particles[:]:
+            particle.update()
+            if particle.age >= particle.max_age:
+                dust_particles.remove(particle)
+        # Update and remove explosion particles
+        for explosion in explosion_particles[:]:
+            explosion.update()
+            if explosion.lifetime <= 0:
+                explosion_particles.remove(explosion)
 
 # -------------------------- Continue Game Loop --------------------------
 
@@ -1474,60 +1556,7 @@ def run_game():
                     last_flash_time = current_time
                     flash_count += 1
 
-        # --- Drawing Section ---
-        screen.fill(BLACK)
-        screen.blit(grid_surface, (shake_x, shake_y))
-        if not in_level_transition:
-            for y in range(GRID_HEIGHT):
-                for x in range(GRID_WIDTH):
-                    if grid[y][x]:
-                        draw_3d_block(screen, COLORS[grid[y][x] - 1],
-                                      x * BLOCK_SIZE + shake_x,
-                                      y * BLOCK_SIZE + shake_y,
-                                      BLOCK_SIZE)
-                    if settings.get('grid_lines', True):
-                        pygame.draw.rect(screen, grid_color,
-                                         (x * BLOCK_SIZE + shake_x,
-                                          y * BLOCK_SIZE + shake_y,
-                                          BLOCK_SIZE, BLOCK_SIZE), 1)
-            if settings.get('ghost_piece', True):
-                draw_ghost_piece(tetromino, offset, grid)
-            for cy, row in enumerate(tetromino):
-                for cx, cell in enumerate(row):
-                    if cell:
-                        draw_3d_block(screen, COLORS[color_index - 1],
-                                      (offset[0] + cx) * BLOCK_SIZE + shake_x,
-                                      (offset[1] + cy) * BLOCK_SIZE + shake_y,
-                                      BLOCK_SIZE)
-            for explosion in explosion_particles:
-                explosion.draw(screen, (shake_x, shake_y))
-            for particle in trail_particles:
-                particle.draw(screen)
-            for particle in dust_particles:
-                particle.draw(screen)
-        else:
-            for y in range(GRID_HEIGHT):
-                for x in range(GRID_WIDTH):
-                    if grid[y][x]:
-                        draw_3d_block(screen, COLORS[grid[y][x] - 1],
-                                      x * BLOCK_SIZE + shake_x,
-                                      y * BLOCK_SIZE + shake_y,
-                                      BLOCK_SIZE)
-            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-            overlay.set_alpha(128)
-            overlay.fill(BLACK)
-            screen.blit(overlay, (0, 0))
-            level_text = tetris_font_large.render(f"LEVEL {level}", True, random.choice(COLORS))
-            level_shake_x = random.randint(-10, 10)
-            level_shake_y = random.randint(-10, 10)
-            screen.blit(level_text, (SCREEN_WIDTH//2 - level_text.get_width()//2 + level_shake_x,
-                                      SCREEN_HEIGHT//2 - level_text.get_height()//2 + level_shake_y))
-        draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_total,
-                       is_tetris, tetris_last_flash, tetris_flash_time)
-        pygame.display.flip()
-
-        # --- Event Handling ---
-        # Call the consolidated input handling function
+        # --- Process Events ---
         handle_events(current_time)
 
         # --- Poll Joypad for Continuous Movement ---
@@ -1608,38 +1637,12 @@ def run_game():
                     offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
             last_fall_time = current_time
 
-        # --- Particle Updates ---
-        if flame_trails_enabled and (left_pressed or right_pressed or fast_fall):
-            num_particles = random.randint(3, 5)
-            spawn_offset = 15
-            for _ in range(num_particles):
-                if left_pressed:
-                    direction = "left"
-                    spawn_x = (offset[0] - 1) * BLOCK_SIZE + random.randint(-spawn_offset, 0)
-                    spawn_y = (offset[1] + random.uniform(0.2, 0.8) * len(tetromino)) * BLOCK_SIZE
-                elif right_pressed:
-                    direction = "right"
-                    spawn_x = (offset[0] + len(tetromino[0])) * BLOCK_SIZE + random.randint(0, spawn_offset)
-                    spawn_y = (offset[1] + random.uniform(0.2, 0.8) * len(tetromino)) * BLOCK_SIZE
-                else:
-                    direction = "down"
-                    spawn_x = (offset[0] + random.uniform(0.2, 0.8) * len(tetromino[0])) * BLOCK_SIZE
-                    spawn_y = (offset[1] + len(tetromino)) * BLOCK_SIZE - spawn_offset
-                trail_particles.append(TrailParticle(spawn_x, spawn_y, direction))
+        # --- Update Particles ---
         wind_force = ((-4.0 if left_pressed else 4.0 if right_pressed else 0),
-                      (5.0 if fast_fall else 0))
-        for particle in trail_particles[:]:
-            particle.update(wind_force, screen)
-            if particle.age >= particle.max_age:
-                trail_particles.remove(particle)
-        for particle in dust_particles[:]:
-            particle.update()
-            if particle.age >= particle.max_age:
-                dust_particles.remove(particle)
-        for explosion in explosion_particles[:]:
-            explosion.update()
-            if explosion.lifetime <= 0:
-                explosion_particles.remove(explosion)
+                    (5.0 if fast_fall else 0))
+        update_particles(wind_force)
+
+        # --- Update Screen Shake ---
         screen_shake = max(0, screen_shake - 1)
 
         # --- Danger Zone (Heartbeat) ---
@@ -1651,6 +1654,9 @@ def run_game():
             if heartbeat_playing and heartbeat_sound:
                 heartbeat_sound.stop()
                 heartbeat_playing = False
+
+        # --- Draw Everything ---
+        draw_game(shake_x, shake_y)
 
         clock.tick(60)
         
