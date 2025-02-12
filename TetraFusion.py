@@ -1704,22 +1704,48 @@ def pause_game():
     
     while paused:
         screen.fill(BLACK)
-        screen.blit(pause_text, (SCREEN_WIDTH//2 - pause_text.get_width()//2, SCREEN_HEIGHT//2))
+        screen.blit(pause_text, (SCREEN_WIDTH // 2 - pause_text.get_width() // 2, SCREEN_HEIGHT // 2))
         pygame.display.flip()
+        
         for event in pygame.event.get():
-            if event.type==pygame.QUIT:
+            if event.type == pygame.QUIT:
                 save_settings(settings)
                 pygame.quit()
                 sys.exit()
-            elif event.type==pygame.KEYDOWN:
-                if event.key==settings['controls']['pause'] or event.key==pygame.K_ESCAPE:
+            elif event.type == pygame.KEYDOWN:
+                # Unpause if the pause key (or Escape) is pressed on the keyboard.
+                if event.key == settings['controls']['pause'] or event.key == pygame.K_ESCAPE:
                     paused = False
-                    
-    # Unpause the music when the game is resumed
+            elif event.type == pygame.JOYBUTTONDOWN:
+                # Unpause if the controller's pause/back button is pressed.
+                if settings.get('controller_controls', {}).get('pause') is not None and event.button == settings['controller_controls']['pause']:
+                    paused = False
+
+    # Unpause the music when the game is resumed.
     pygame.mixer.music.unpause()
 
 def display_game_over(score):
     global high_score, high_score_name
+
+    # ---------------- Helper Functions for Duplicate Logic ----------------
+    def restart_game():
+        if settings.get('music_enabled', True):
+            if settings.get('use_custom_music', False):
+                play_custom_music(settings)
+            else:
+                try:
+                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
+                    pygame.mixer.music.play(-1)
+                except Exception as e:
+                    print(f"Error loading default background music: {e}")
+        else:
+            stop_music()
+        run_game()
+
+    def go_to_main_menu():
+        main_menu()
+
+    # ---------------- NEW HIGH SCORE BRANCH ----------------
     if score > high_score:
         initials = ""
         input_active = True
@@ -1750,22 +1776,26 @@ def display_game_over(score):
                     elif len(initials) < 3 and event.unicode.isalnum():
                         initials += event.unicode.upper()
                     elif event.key == pygame.K_m:
-                        main_menu()
+                        go_to_main_menu()
                         return
-        # After saving high score, restart the music and restart the game.
-        if settings.get('music_enabled', True):
-            if settings.get('use_custom_music', False):
-                play_custom_music(settings)
-            else:
-                try:
-                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
-                    pygame.mixer.music.play(-1)
-                except Exception as e:
-                    print(f"Error loading default background music: {e}")
-        else:
-            stop_music()
-        run_game()
+                elif event.type == pygame.JOYBUTTONDOWN:
+                    if settings.get("controller_menu_navigation"):
+                        # Controller select acts like ENTER.
+                        if event.button == settings["controller_menu_navigation"].get("select"):
+                            if initials:
+                                high_score = score
+                                high_score_name = initials
+                                save_high_score(high_score, high_score_name)
+                                input_active = False
+                        # Controller back acts like M (menu).
+                        elif event.button == settings["controller_menu_navigation"].get("back"):
+                            go_to_main_menu()
+                            return
+        # After saving the high score, restart the game.
+        restart_game()
         return
+
+    # ---------------- NORMAL GAME OVER BRANCH ----------------
     else:
         screen.fill(BLACK)
         game_over_text = tetris_font_large.render("GAME OVER", True, RED)
@@ -1785,22 +1815,21 @@ def display_game_over(score):
                     sys.exit()
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_r:
-                        if settings.get('music_enabled', True):
-                            if settings.get('use_custom_music', False):
-                                play_custom_music(settings)
-                            else:
-                                try:
-                                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
-                                    pygame.mixer.music.play(-1)
-                                except Exception as e:
-                                    print(f"Error loading default background music: {e}")
-                        else:
-                            stop_music()
-                        run_game()
+                        restart_game()
                         return
                     elif event.key == pygame.K_m:
-                        main_menu()
+                        go_to_main_menu()
                         return
+                elif event.type == pygame.JOYBUTTONDOWN:
+                    if settings.get("controller_menu_navigation"):
+                        # Controller select acts as R (restart).
+                        if event.button == settings["controller_menu_navigation"].get("select"):
+                            restart_game()
+                            return
+                        # Controller back acts as M (menu).
+                        elif event.button == settings["controller_menu_navigation"].get("back"):
+                            go_to_main_menu()
+                            return
 
 def place_tetromino(tetromino, offset, grid, color_index):
     for cy, row in enumerate(tetromino):
