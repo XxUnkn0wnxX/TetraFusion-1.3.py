@@ -751,7 +751,6 @@ def draw_shadow_reflection(tetromino, ghost_offset, grid):
                     screen.blit(shadow_block, (x, y))
 
 # -------------------------- Custom Music Functions --------------------------
-
 def play_custom_music(settings):
     global custom_music_playlist, current_track_index, last_track_index
     if not settings.get('music_enabled', True):
@@ -760,8 +759,7 @@ def play_custom_music(settings):
 
     update_custom_music_playlist(settings)
     
-    # If custom music is enabled and we have a previously saved track index,
-    # restore it. Otherwise, start at index 0.
+    # Restore a previously saved track index if applicable; otherwise, start at 0.
     if settings.get('use_custom_music', False) and last_track_index is not None and last_track_index < len(custom_music_playlist):
         current_track_index = last_track_index
     else:
@@ -772,7 +770,7 @@ def play_custom_music(settings):
         pygame.mixer.music.stop()
         try:
             pygame.mixer.music.load(track)
-            pygame.mixer.music.play(0)  # Play once so that MUSIC_END_EVENT fires when the track ends.
+            pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when the track ends.
             pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
         except Exception as e:
             print(f"Error playing custom music: {e}")
@@ -784,6 +782,25 @@ def play_custom_music(settings):
             pygame.mixer.music.play(-1)
         except Exception as e:
             print(f"Error loading default background music: {e}")
+
+def skip_current_track():
+    global custom_music_playlist, current_track_index, last_track_index, settings
+    # If music is disabled, do nothing.
+    if not settings.get('music_enabled', True):
+        return
+
+    if custom_music_playlist:
+        current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+        try:
+            pygame.mixer.music.load(custom_music_playlist[current_track_index])
+            pygame.mixer.music.play(0)
+            # Save the new track index so that future sessions or game over resumes remember it.
+            last_track_index = current_track_index
+        except Exception as e:
+            print(f"Error skipping to next track: {e}")
+
+def stop_music():
+    pygame.mixer.music.stop()
 
 # -------------------------- Menu System --------------------------
 def draw_main_menu():
@@ -1104,54 +1121,6 @@ def place_tetromino(tetromino, offset, grid, color_index):
                 if 0 <= x < GRID_WIDTH and 0 <= y < GRID_HEIGHT:
                     grid[y][x] = color_index
 
-# -------------------------- Custom Music Functions --------------------------
-def play_custom_music(settings):
-    global custom_music_playlist, current_track_index, last_track_index
-    if not settings.get('music_enabled', True):
-        pygame.mixer.music.stop()
-        return
-
-    update_custom_music_playlist(settings)
-    
-    # If using custom music and we have a previously saved track index, restore it.
-    if settings.get('use_custom_music', False) and last_track_index is not None and last_track_index < len(custom_music_playlist):
-        current_track_index = last_track_index
-    else:
-        current_track_index = 0
-
-    if custom_music_playlist:
-        track = custom_music_playlist[current_track_index]
-        pygame.mixer.music.stop()
-        try:
-            pygame.mixer.music.load(track)
-            pygame.mixer.music.play(0)  # play once so MUSIC_END_EVENT fires when track ends
-            pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
-        except Exception as e:
-            print(f"Error playing custom music: {e}")
-    else:
-        print("No music files found in the selected directory.")
-
-
-def skip_current_track():
-    global custom_music_playlist, current_track_index, last_track_index, settings
-    # If music is disabled, do nothing.
-    if not settings.get('music_enabled', True):
-        return
-
-    if custom_music_playlist:
-        current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-        try:
-            pygame.mixer.music.load(custom_music_playlist[current_track_index])
-            pygame.mixer.music.play(0)
-            # Save the new track index so that when game over occurs and later resumes,
-            # it will remember the last track that was played.
-            last_track_index = current_track_index
-        except Exception as e:
-            print(f"Error skipping to next track: {e}")
-
-def stop_music():
-    pygame.mixer.music.stop()
-
 # -------------------------- Menu System --------------------------
 def draw_main_menu():
     screen.fill(BLACK)
@@ -1240,55 +1209,6 @@ def place_tetromino(tetromino, offset, grid, color_index):
                 if 0 <= x < GRID_WIDTH and 0 <= y < GRID_HEIGHT:
                     grid[y][x] = color_index
 
-
-# -------------------------- Custom Music Functions --------------------------
-def play_custom_music(settings):
-    global custom_music_playlist, current_track_index, last_track_index
-    if not settings.get('music_enabled', True):
-        pygame.mixer.music.stop()
-        return
-
-    update_custom_music_playlist(settings)
-    
-    # If using custom music and we have a previously saved track index, restore it.
-    if settings.get('use_custom_music', False) and last_track_index is not None and last_track_index < len(custom_music_playlist):
-        current_track_index = last_track_index
-    else:
-        current_track_index = 0
-
-    if custom_music_playlist:
-        track = custom_music_playlist[current_track_index]
-        pygame.mixer.music.stop()
-        try:
-            pygame.mixer.music.load(track)
-            pygame.mixer.music.play(0)  # play once so MUSIC_END_EVENT fires when track ends
-            pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
-        except Exception as e:
-            print(f"Error playing custom music: {e}")
-    else:
-        print("No music files found in the selected directory.")
-
-
-def skip_current_track():
-    global custom_music_playlist, current_track_index, last_track_index, settings
-    # If music is disabled, do nothing.
-    if not settings.get('music_enabled', True):
-        return
-
-    if custom_music_playlist:
-        current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-        try:
-            pygame.mixer.music.load(custom_music_playlist[current_track_index])
-            pygame.mixer.music.play(0)
-            # Save the new track index so that when game over occurs and later resumes,
-            # it will remember the last track that was played.
-            last_track_index = current_track_index
-        except Exception as e:
-            print(f"Error skipping to next track: {e}")
-
-def stop_music():
-    pygame.mixer.music.stop()
-
 # -------------------------- Menu System --------------------------
 def draw_main_menu():
     screen.fill(BLACK)
@@ -1376,54 +1296,6 @@ def place_tetromino(tetromino, offset, grid, color_index):
                 y = offset[1] + cy
                 if 0 <= x < GRID_WIDTH and 0 <= y < GRID_HEIGHT:
                     grid[y][x] = color_index
-
-# -------------------------- Custom Music Functions --------------------------
-def play_custom_music(settings):
-    global custom_music_playlist, current_track_index, last_track_index
-    if not settings.get('music_enabled', True):
-        pygame.mixer.music.stop()
-        return
-
-    update_custom_music_playlist(settings)
-    
-    # If using custom music and we have a previously saved track index, restore it.
-    if settings.get('use_custom_music', False) and last_track_index is not None and last_track_index < len(custom_music_playlist):
-        current_track_index = last_track_index
-    else:
-        current_track_index = 0
-
-    if custom_music_playlist:
-        track = custom_music_playlist[current_track_index]
-        pygame.mixer.music.stop()
-        try:
-            pygame.mixer.music.load(track)
-            pygame.mixer.music.play(0)  # play once so MUSIC_END_EVENT fires when track ends
-            pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
-        except Exception as e:
-            print(f"Error playing custom music: {e}")
-    else:
-        print("No music files found in the selected directory.")
-
-
-def skip_current_track():
-    global custom_music_playlist, current_track_index, last_track_index, settings
-    # If music is disabled, do nothing.
-    if not settings.get('music_enabled', True):
-        return
-
-    if custom_music_playlist:
-        current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-        try:
-            pygame.mixer.music.load(custom_music_playlist[current_track_index])
-            pygame.mixer.music.play(0)
-            # Save the new track index so that when game over occurs and later resumes,
-            # it will remember the last track that was played.
-            last_track_index = current_track_index
-        except Exception as e:
-            print(f"Error skipping to next track: {e}")
-
-def stop_music():
-    pygame.mixer.music.stop()
 
 # -------------------------- Menu System --------------------------
 def draw_main_menu(selected_index, menu_options):
