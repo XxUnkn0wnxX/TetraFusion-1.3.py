@@ -39,7 +39,7 @@ is_dmg = any("bdist_dmg" in arg for arg in sys.argv)
 # Read only the first line from TetraFusion.py to extract version.
 with open("TetraFusion.py", "r") as f:
     first_line = f.readline().strip()
-match = re.search(r'#\s*Game Ver:\s*([\d\.]+)', first_line)
+match = re.search(r'#\s*Game Ver:?\s*([\d\.]+)', first_line)
 if match:
     version = match.group(1)
 else:
