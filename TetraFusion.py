@@ -212,6 +212,7 @@ DOUBLE_CLICK_TIME = 300
 hold_piece = None
 hold_used = False  # Prevent repeated holds until the current piece locks in
 
+YELLOW = (255, 255, 0)
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED   = (255, 0, 0)
@@ -1339,21 +1340,54 @@ def keyboard_keybinds_menu():
     while True:
         screen.fill(BLACK)
         title_text = tetris_font_large.render("Keyboard Keybinds", True, WHITE)
-        scaled_title = pygame.transform.scale(title_text, (int(title_text.get_width() * 0.8),
-                                                             int(title_text.get_height() * 0.8)))
-        screen.blit(scaled_title, (SCREEN_WIDTH // 2 - scaled_title.get_width() // 2, 50))
-        
+        scaled_title = pygame.transform.scale(
+            title_text,
+            (int(title_text.get_width() * 0.8), int(title_text.get_height() * 0.8))
+        )
+        screen.blit(
+            scaled_title,
+            (SCREEN_WIDTH // 2 - scaled_title.get_width() // 2, 50)
+        )
+    
         # Render each keybind option.
         for i, (key, label) in enumerate(keybind_options):
+            # Decide the overall color for the label (red if selected, else white).
             color = RED if i == selected_option else WHITE
-            if key in settings['controls']:
-                display_text = f"{label}: {pygame.key.name(settings['controls'][key]).upper()}"
-            else:
-                display_text = label
-            option_text = tetris_font_medium.render(display_text, True, color)
-            y_coordinate = base_y + i * option_spacing
-            screen.blit(option_text, (SCREEN_WIDTH // 2 - option_text.get_width() // 2, y_coordinate))
         
+            # Y-position for this line
+            y_coordinate = base_y + i * option_spacing
+            x_center = SCREEN_WIDTH // 2  # We'll center things horizontally
+
+            # If key is in our controls dict, we do two-part rendering: label + key
+            if key in settings['controls']:
+                # 1) Label portion
+                label_text = label + ": "
+                label_surface = tetris_font_medium.render(label_text, True, color)
+
+                # 2) Key portion - if we are capturing a binding (changing_key == key), show it in yellow
+                if changing_key == key:
+                    key_color = YELLOW
+                else:
+                    key_color = color
+
+                key_name = pygame.key.name(settings['controls'][key]).upper()
+                key_surface = tetris_font_medium.render(key_name, True, key_color)
+
+                # Now blit them side by side (still centered as a whole).
+                combined_width = label_surface.get_width() + key_surface.get_width()
+                x_start = x_center - combined_width // 2
+                screen.blit(label_surface, (x_start, y_coordinate))
+                screen.blit(key_surface, (x_start + label_surface.get_width(), y_coordinate))
+
+            else:
+                # If it's not actually in settings['controls'], just render a single label.
+                display_text = label
+                option_text = tetris_font_medium.render(display_text, True, color)
+                screen.blit(
+                    option_text,
+                    (x_center - option_text.get_width() // 2, y_coordinate)
+                )
+    
         pygame.display.flip()
 
         # Call the navigation sub-function to process events.
@@ -1505,27 +1539,63 @@ def controller_keybinds_menu():
     while True:
         screen.fill(BLACK)
         title_text = tetris_font_large.render("Controller Keybinds", True, WHITE)
-        scaled_title = pygame.transform.scale(title_text, (int(title_text.get_width() * 0.8),
-                                                             int(title_text.get_height() * 0.8)))
-        screen.blit(scaled_title, (SCREEN_WIDTH // 2 - scaled_title.get_width() // 2, 50))
-        
+        scaled_title = pygame.transform.scale(
+            title_text,
+            (int(title_text.get_width() * 0.8), int(title_text.get_height() * 0.8))
+        )
+        screen.blit(
+            scaled_title,
+            (SCREEN_WIDTH // 2 - scaled_title.get_width() // 2, 50)
+        )
+    
         # Render each controller option.
         for i, (key, label) in enumerate(controller_options):
+            # Overall color (red if selected, white otherwise).
             color = RED if i == selected_option else WHITE
+        
+            # Determine position
+            y_coordinate = base_y + i * option_spacing
+            x_center = SCREEN_WIDTH // 2
+        
+            # If it's bindable, split into label + button binding
             if key in bindable_keys:
+                # 1) label portion
+                label_text = label + ": "
+                label_surface = tetris_font_medium.render(label_text, True, color)
+
+                # 2) binding portion
                 current_binding = settings['controller_controls'].get(key)
                 if current_binding is not None:
-                    display_text = f"{label}: Button {current_binding}"
+                    binding_str = f"Button {current_binding}"
                 else:
-                    display_text = label
-            else:
-                display_text = label  # Non-bindable options.
-            option_text = tetris_font_medium.render(display_text, True, color)
-            y_coordinate = base_y + i * option_spacing
-            screen.blit(option_text, (SCREEN_WIDTH // 2 - option_text.get_width() // 2, y_coordinate))
+                    binding_str = "(none)"
+            
+                # If currently capturing a new binding for this key => YELLOW
+                if changing_button == key:
+                    binding_color = YELLOW
+                else:
+                    binding_color = color
+
+                binding_surface = tetris_font_medium.render(binding_str, True, binding_color)
+            
+                # Position them side by side
+                combined_width = label_surface.get_width() + binding_surface.get_width()
+                x_start = x_center - (combined_width // 2)
+            
+                # Blit them
+                screen.blit(label_surface, (x_start, y_coordinate))
+                screen.blit(binding_surface, (x_start + label_surface.get_width(), y_coordinate))
         
+            else:
+                # Non-bindable option => single string
+                display_text = label
+                option_text = tetris_font_medium.render(display_text, True, color)
+                x_pos = x_center - (option_text.get_width() // 2)
+                screen.blit(option_text, (x_pos, y_coordinate))
+    
         pygame.display.flip()
 
+        # Process events and handle actions.
         selected_option, changing_button, enter_pressed, action = process_ctrl_nav_events(
             controller_options, selected_option, changing_button, enter_pressed
         )
@@ -1661,31 +1731,71 @@ def controller_menu_nav_menu():
     while True:
         screen.fill(BLACK)
         title_text = tetris_font_large.render("Menu Nav Bindings", True, WHITE)
-        scaled_title = pygame.transform.scale(title_text, (int(title_text.get_width() * 0.8),
-                                                             int(title_text.get_height() * 0.8)))
-        screen.blit(scaled_title, (SCREEN_WIDTH // 2 - scaled_title.get_width() // 2, 50))
-        
+        scaled_title = pygame.transform.scale(
+            title_text,
+            (int(title_text.get_width() * 0.8), int(title_text.get_height() * 0.8))
+        )
+        screen.blit(
+            scaled_title,
+            (SCREEN_WIDTH // 2 - scaled_title.get_width() // 2, 50)
+        )
+    
         # Render each menu navigation option.
         for i, (key, label) in enumerate(menu_nav_options):
+            # Decide the overall color (red if selected, else white).
             color = RED if i == selected_option else WHITE
+        
+            y_coordinate = base_y + i * option_spacing
+            x_center = SCREEN_WIDTH // 2
+        
             if key in bindable_keys:
+                # 1) Render the label part
+                label_text = label + ": "
+                label_surface = tetris_font_medium.render(label_text, True, color)
+            
+                # 2) Decide on the actual button text
                 current_binding = settings["controller_menu_navigation"].get(key)
                 if current_binding is not None:
-                    display_text = f"{label}: Button {current_binding}"
+                    binding_str = f"Button {current_binding}"
                 else:
-                    display_text = label
-            else:
-                display_text = label  # For non-bindable options.
-            option_text = tetris_font_medium.render(display_text, True, color)
-            # If this is the "exit" option, scale it.
-            if key == "exit":
-                option_text = pygame.transform.scale(option_text, (int(option_text.get_width() * 0.85),
-                                                                     int(option_text.get_height() * 0.85)))
-            y_coordinate = base_y + i * option_spacing
-            screen.blit(option_text, (SCREEN_WIDTH // 2 - option_text.get_width() // 2, y_coordinate))
+                    binding_str = "(none)"
+
+                # If we're currently capturing this key's binding, make it yellow
+                if changing_button == key:
+                    binding_color = YELLOW
+                else:
+                    binding_color = color
+
+                binding_surface = tetris_font_medium.render(binding_str, True, binding_color)
+
+                # Combine side by side, still center as a whole
+                combined_width = label_surface.get_width() + binding_surface.get_width()
+                x_start = x_center - (combined_width // 2)
+            
+                # Blit
+                screen.blit(label_surface, (x_start, y_coordinate))
+                screen.blit(binding_surface, (x_start + label_surface.get_width(), y_coordinate))
         
+            else:
+                # Non-bindable option (e.g. "exit"). Render as a single string.
+                display_text = label
+                option_text = tetris_font_medium.render(display_text, True, color)
+            
+                # If this is the "exit" option, scale it as before.
+                if key == "exit":
+                    option_text = pygame.transform.scale(
+                        option_text,
+                        (int(option_text.get_width() * 0.85), int(option_text.get_height() * 0.85))
+                    )
+            
+                screen.blit(
+                    option_text,
+                    (x_center - option_text.get_width() // 2, y_coordinate)
+                )
+
         pygame.display.flip()
 
+        # Process events and handle actions.
         selected_option, changing_button, enter_pressed, action = process_menu_nav_events(
             menu_nav_options, selected_option, changing_button, enter_pressed
         )
