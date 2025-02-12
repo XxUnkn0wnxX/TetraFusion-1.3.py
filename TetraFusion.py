@@ -1245,7 +1245,7 @@ def run_game():
     
     # -------------------------- Game Helpers --------------------------
 
-    def perform_hard_drop():
+    def lock_and_update_tetromino():
         nonlocal tetromino, offset, score, game_over, grid, lines_cleared_total
         global hold_used  # Use global for hold_used since it's declared as global in run_game()
         nonlocal pieces_dropped, screen_shake, is_tetris, tetris_last_flash, level
@@ -1488,9 +1488,9 @@ def run_game():
                             offset = [GRID_WIDTH//2 - len(tetromino[0])//2, 0]
                 elif event.key == controls['pause']:
                     pause_game()
-                # new hard drop logic    
+                # uses new tetromino sub-function 
                 elif event.key == controls['hard_drop']:
-                    perform_hard_drop()
+                    lock_and_update_tetromino()
             elif event.type == pygame.KEYUP:
                 if event.key == controls['left']:
                     left_pressed = False
@@ -1505,9 +1505,9 @@ def run_game():
                 if event.button == 0:
                     rotated, new_offset = rotate_tetromino_with_kick(tetromino, offset, grid)
                     tetromino, offset = rotated, new_offset
-                # new hard drop logic
+                # uses new tetromino sub-function
                 elif event.button == 1:
-                    perform_hard_drop()
+                    lock_and_update_tetromino()
                 elif event.button == 2:
                     if not hold_used:
                         hold_used = True
