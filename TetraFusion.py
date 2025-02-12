@@ -730,9 +730,11 @@ def draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_t
     
     # --- Buttons ---
     if settings.get('use_custom_music', False):
+        # If custom music is ON, we show 3 buttons: Restart, Skip, Main Menu
         btn_space = 40
         button_width = (SUBWINDOW_WIDTH - btn_space) // 3
         button_y = SCREEN_HEIGHT - 60
+        
         restart_button_rect = pygame.Rect(10, button_y, button_width, 30)
         skip_button_rect = pygame.Rect(20 + button_width, button_y, button_width, 30)
         menu_button_rect = pygame.Rect(30 + 2 * button_width, button_y, button_width, 30)
@@ -752,10 +754,14 @@ def draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_t
             menu_button_rect.x + (menu_button_rect.width - menu_text.get_width()) // 2,
             menu_button_rect.y + (menu_button_rect.height - menu_text.get_height()) // 2))
     else:
+        # If custom music is OFF, we show 2 buttons: Restart, Main Menu
         button_width = (SUBWINDOW_WIDTH - 30) // 2
         button_y = SCREEN_HEIGHT - 60
+        
         restart_button_rect = pygame.Rect(10, button_y, button_width, 30)
-        menu_button_rect = pygame.Rect(20 + button_width, button_y, button_width, 30)
+        menu_button_rect    = pygame.Rect(20 + button_width, button_y, button_width, 30)
+        skip_button_rect    = None  # Not used in this mode
+        
         pygame.draw.rect(subwindow, (50, 50, 200), restart_button_rect)
         restart_text = tetris_font_small.render("Restart", True, WHITE)
         subwindow.blit(restart_text, (
@@ -767,6 +773,7 @@ def draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_t
             menu_button_rect.x + (menu_button_rect.width - menu_text.get_width()) // 2,
             menu_button_rect.y + (menu_button_rect.height - menu_text.get_height()) // 2))
     
+    # Finally, draw the subwindow onto the main screen
     screen.blit(subwindow, (SCREEN_WIDTH, 0))
 
 # ---------- Updated Ghost Piece with Color Option ----------
@@ -2250,26 +2257,37 @@ def run_game():
         global game_command
         for event in events:
             if event.type == pygame.MOUSEBUTTONDOWN:
-                # Only process events on the subwindow area.
+                # Only process events on the subwindow side
                 if event.pos[0] >= SCREEN_WIDTH:
                     rel_x = event.pos[0] - SCREEN_WIDTH
                     rel_y = event.pos[1]
+
+                    # 1) Volume Bar
                     if sound_bar_rect and sound_bar_rect.collidepoint(rel_x, rel_y):
                         new_volume = (rel_x - sound_bar_rect.x) / sound_bar_rect.width
                         pygame.mixer.music.set_volume(new_volume)
+
+                    # 2) Restart Button
                     if restart_button_rect and restart_button_rect.collidepoint(rel_x, rel_y):
                         game_command = "restart"
-                        return
-                    if settings.get('use_custom_music', False):
-                        if skip_button_rect and skip_button_rect.collidepoint(rel_x, rel_y):
+                        return  # can exit early if you like
+
+                    # 3) Skip Button (only if custom music is on AND skip_button_rect is set)
+                    if settings.get('use_custom_music', False) and skip_button_rect:
+                        if skip_button_rect.collidepoint(rel_x, rel_y):
                             game_command = "skip"
-                        if menu_button_rect and menu_button_rect.collidepoint(rel_x, rel_y):
-                            game_command = "menu"
+
+                    # 4) Menu Button (ALWAYS check for menu_button_rect)
+                    if menu_button_rect and menu_button_rect.collidepoint(rel_x, rel_y):
+                        game_command = "menu"
+
+            # Handle dragging volume bar, etc.
             elif event.type == pygame.MOUSEMOTION:
                 if event.buttons[0]:
                     if event.pos[0] >= SCREEN_WIDTH:
                         rel_x = event.pos[0] - SCREEN_WIDTH
-                        if sound_bar_rect and sound_bar_rect.collidepoint(rel_x, event.pos[1]):
+                        rel_y = event.pos[1]
+                        if sound_bar_rect and sound_bar_rect.collidepoint(rel_x, rel_y):
                             new_volume = (rel_x - sound_bar_rect.x) / sound_bar_rect.width
                             pygame.mixer.music.set_volume(new_volume)
 
