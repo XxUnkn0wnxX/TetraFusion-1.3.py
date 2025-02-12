@@ -166,7 +166,7 @@ def update_custom_music_playlist(settings):
 
 if sys.platform == "darwin":
     try:
-        from AppKit import NSOpenPanel
+        from AppKit import NSOpenPanel, NSApplication
     except ImportError:
         NSOpenPanel = None
 
@@ -183,7 +183,10 @@ if sys.platform == "darwin":
         panel.setCanChooseFiles_(False)
         panel.setCanChooseDirectories_(True)
         panel.setAllowsMultipleSelection_(False)
-        if panel.runModal() == 1:
+        result = panel.runModal()
+        # Restore focus to the game window.
+        NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+        if result == 1:
             # panel.URL() returns an NSURL; we need its path.
             return panel.URL().path()
         return ""
