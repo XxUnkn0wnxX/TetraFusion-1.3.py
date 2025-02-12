@@ -1053,6 +1053,16 @@ def options_menu():
                 save_settings(settings)
                 pygame.quit()
                 sys.exit()
+            elif event.type == MUSIC_END_EVENT:
+                if settings.get('use_custom_music', False) and custom_music_playlist:
+                    global current_track_index
+                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
+                    try:
+                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
+                        pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires again
+                        pygame.mixer.music.set_endevent(MUSIC_END_EVENT)
+                    except Exception as e:
+                        print(f"Error loading next track: {e}")
             elif event.type == pygame.KEYDOWN:
                 # Only process Enter if it's not already pressed.
                 if event.key == pygame.K_RETURN and not enter_pressed:
