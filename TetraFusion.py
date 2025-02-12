@@ -300,7 +300,8 @@ def load_settings(filename="settings.json"):
             "rotate": pygame.K_UP,
             "pause": pygame.K_p,
             "hard_drop": pygame.K_SPACE,
-            "hold": pygame.K_c
+            "hold": pygame.K_c,
+            "skip_track": pygame.K_x   # default key for skipping track
         },
         "difficulty": "normal",
         "flame_trails": True,
@@ -975,13 +976,7 @@ def options_menu():
     selected_option = 0
     enter_pressed = False  # Flag to track whether Enter is held down
     options = [
-        ('left', 'Move Left'),
-        ('right', 'Move Right'),
-        ('down', 'Soft Drop'),
-        ('rotate', 'Rotate'),
-        ('hard_drop', 'Hard Drop'),
-        ('hold', 'Hold Piece'),
-        ('pause', 'Pause'),
+        ('keybinds', 'Keyboard Keybinds'),
         ('difficulty', 'Difficulty'),
         ('flame_trails', 'Flame Trails'),
         ('grid_opacity', 'Grid Opacity'),
@@ -1052,7 +1047,9 @@ def options_menu():
                 if event.key == pygame.K_RETURN and not enter_pressed:
                     enter_pressed = True  # Mark Enter as pressed
                     current_key = options[selected_option][0]
-                    if current_key in settings['controls']:
+                    if current_key == 'keybinds':
+                        keyboard_keybinds_menu()
+                    elif current_key in settings['controls']:
                         changing_key = current_key
                     elif current_key == 'difficulty':
                         difficulties = ['easy', 'normal', 'hard', 'very hard']
@@ -1109,9 +1106,6 @@ def options_menu():
                     elif current_key == 'back':
                         save_settings(settings)
                         return
-                elif changing_key:
-                    settings['controls'][changing_key] = event.key
-                    changing_key = None
                 elif event.key == pygame.K_UP:
                     selected_option = (selected_option - 1) % len(options)
                 elif event.key == pygame.K_DOWN:
@@ -1122,6 +1116,77 @@ def options_menu():
             elif event.type == pygame.KEYUP:
                 if event.key == pygame.K_RETURN:
                     enter_pressed = False  # Reset the flag when Enter is released
+
+# Options Keyboard Controls            
+def keyboard_keybinds_menu():
+    selected_option = 0
+    changing_key = None
+
+    # Ensure the music skip key is available.
+    if 'skip_track' not in settings['controls']:
+        settings['controls']['skip_track'] = pygame.K_x
+
+    # List of keybind options: first element is the setting key,
+    # second element is a label to show.
+    keybind_options = [
+        ('left', 'Move Left'),
+        ('right', 'Move Right'),
+        ('down', 'Soft Drop'),
+        ('rotate', 'Rotate'),
+        ('hard_drop', 'Hard Drop'),
+        ('hold', 'Hold Piece'),
+        ('pause', 'Pause'),
+        ('skip_track', 'Skip Track'),
+        ('back', 'Back to Options')
+    ]
+    option_spacing = 45
+    base_y = 150  # starting vertical position
+
+    while True:
+        screen.fill(BLACK)
+        title_text = tetris_font_large.render("Keyboard Keybinds", True, WHITE)
+        scaled_title = pygame.transform.scale(title_text, (int(title_text.get_width() * 0.8), int(title_text.get_height() * 0.8)))
+        screen.blit(scaled_title, (SCREEN_WIDTH // 2 - scaled_title.get_width() // 2, 50))
+        
+        # Render each keybind option.
+        for i, (key, label) in enumerate(keybind_options):
+            color = RED if i == selected_option else WHITE
+            if key in settings['controls']:
+                display_text = f"{label}: {pygame.key.name(settings['controls'][key]).upper()}"
+            else:
+                display_text = label
+            option_text = tetris_font_medium.render(display_text, True, color)
+            y_coordinate = base_y + i * option_spacing
+            screen.blit(option_text, (SCREEN_WIDTH // 2 - option_text.get_width() // 2, y_coordinate))
+        
+        pygame.display.flip()
+        
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                save_settings(settings)
+                pygame.quit()
+                sys.exit()
+            elif event.type == MUSIC_END_EVENT:
+                handle_music_end_event()
+            elif event.type == pygame.KEYDOWN:
+                # If we're already waiting for a new key, update the binding immediately.
+                if changing_key is not None:
+                    settings['controls'][changing_key] = event.key
+                    changing_key = None
+                else:
+                     # Otherwise, process navigation and selection.
+                    if event.key == pygame.K_UP:
+                        selected_option = (selected_option - 1) % len(keybind_options)
+                    elif event.key == pygame.K_DOWN:
+                        selected_option = (selected_option + 1) % len(keybind_options)
+                    elif event.key == pygame.K_RETURN:
+                        # If "Back" is selected, exit the keybinds menu.
+                        if keybind_options[selected_option][0] == 'back':
+                            return
+                        else:
+                            changing_key = keybind_options[selected_option][0]
+            elif event.type == pygame.KEYUP:
+                pass
 
 def pause_game():
     global settings
