@@ -803,34 +803,48 @@ def stop_music():
     pygame.mixer.music.stop()
 
 # -------------------------- Menu System --------------------------
-def draw_main_menu():
+def draw_main_menu(selected_index, menu_options):
+    """
+    Draws the main menu screen with a title and a list of selectable options.
+    The option at index 'selected_index' is highlighted.
+    """
     screen.fill(BLACK)
     title_text = tetris_font_large.render("TetraFusion", True, random.choice(COLORS))
-    start_text = tetris_font_medium.render("Press ENTER to Start", True, WHITE)
-    options_text = tetris_font_medium.render("Press O for Options", True, WHITE)
-    exit_text = tetris_font_medium.render("Press ESC to Quit", True, WHITE)
-    screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, SCREEN_HEIGHT//3))
-    screen.blit(start_text, (SCREEN_WIDTH//2 - start_text.get_width()//2, SCREEN_HEIGHT//2))
-    screen.blit(options_text, (SCREEN_WIDTH//2 - options_text.get_width()//2, SCREEN_HEIGHT//2+50))
-    screen.blit(exit_text, (SCREEN_WIDTH//2 - exit_text.get_width()//2, SCREEN_HEIGHT//2+100))
+    # Draw title above the menu options.
+    screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, SCREEN_HEIGHT//3 - 100))
+    # Draw each menu option.
+    for i, option in enumerate(menu_options):
+        color = RED if i == selected_index else WHITE
+        option_text = tetris_font_medium.render(option, True, color)
+        x = SCREEN_WIDTH//2 - option_text.get_width()//2
+        y = SCREEN_HEIGHT//2 + i * 50
+        screen.blit(option_text, (x, y))
     pygame.display.flip()
 
 def main_menu():
-    # Ensure music is started when entering the main menu.
+    # Start background music if enabled.
     if settings.get('music_enabled', True):
         if settings.get('use_custom_music', False):
+            # If custom music is enabled, start it if not already playing.
             if not pygame.mixer.music.get_busy():
                 play_custom_music(settings)
         else:
+            # Otherwise, load and loop the default background music.
             if not pygame.mixer.music.get_busy():
                 try:
                     pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
                     pygame.mixer.music.play(-1)  # Loop indefinitely
                 except Exception as e:
                     print(f"Error loading default background music: {e}")
+                    
+    # Define the menu options.
+    menu_options = ["Start", "Options", "Quit"]
+    selected_index = 0
+    joy_delay = 150  # milliseconds delay for joystick hat input
+    last_move = pygame.time.get_ticks()
 
     while True:
-        draw_main_menu()
+        draw_main_menu(selected_index, menu_options)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 save_settings(settings)
@@ -846,16 +860,49 @@ def main_menu():
                         pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when track ends
                     except Exception as e:
                         print(f"Error loading next track: {e}")
+            # --- Keyboard Input ---
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:
-                    return
+                if event.key in (pygame.K_DOWN, pygame.K_s):
+                    selected_index = (selected_index + 1) % len(menu_options)
+                elif event.key in (pygame.K_UP, pygame.K_w):
+                    selected_index = (selected_index - 1) % len(menu_options)
+                elif event.key == pygame.K_RETURN:
+                    if menu_options[selected_index] == "Start":
+                        return  # Exit menu and start game
+                    elif menu_options[selected_index] == "Options":
+                        options_menu()
+                    elif menu_options[selected_index] == "Quit":
+                        save_settings(settings)
+                        pygame.quit()
+                        sys.exit()
                 elif event.key == pygame.K_o:
                     options_menu()
                 elif event.key == pygame.K_ESCAPE:
                     save_settings(settings)
                     pygame.quit()
                     sys.exit()
-
+            # --- Joypad Hat (D-pad) Input ---
+            elif event.type == pygame.JOYHATMOTION:
+                cur_time = pygame.time.get_ticks()
+                if cur_time - last_move > joy_delay:
+                    hx, hy = event.value
+                    if hy == -1:
+                        selected_index = (selected_index + 1) % len(menu_options)
+                    elif hy == 1:
+                        selected_index = (selected_index - 1) % len(menu_options)
+                    last_move = cur_time
+            # --- Joypad Button Input (button 0 acts as select) ---
+            elif event.type == pygame.JOYBUTTONDOWN:
+                if event.button == 0:
+                    if menu_options[selected_index] == "Start":
+                        return
+                    elif menu_options[selected_index] == "Options":
+                        options_menu()
+                    elif menu_options[selected_index] == "Quit":
+                        save_settings(settings)
+                        pygame.quit()
+                        sys.exit()
+        clock.tick(30)
 
 def options_menu():
     global settings, last_track_index
@@ -1120,265 +1167,6 @@ def place_tetromino(tetromino, offset, grid, color_index):
                 y = offset[1] + cy
                 if 0 <= x < GRID_WIDTH and 0 <= y < GRID_HEIGHT:
                     grid[y][x] = color_index
-
-# -------------------------- Menu System --------------------------
-def draw_main_menu():
-    screen.fill(BLACK)
-    title_text = tetris_font_large.render("TetraFusion", True, random.choice(COLORS))
-    start_text = tetris_font_medium.render("Press ENTER to Start", True, WHITE)
-    options_text = tetris_font_medium.render("Press O for Options", True, WHITE)
-    exit_text = tetris_font_medium.render("Press ESC to Quit", True, WHITE)
-    screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, SCREEN_HEIGHT//3))
-    screen.blit(start_text, (SCREEN_WIDTH//2 - start_text.get_width()//2, SCREEN_HEIGHT//2))
-    screen.blit(options_text, (SCREEN_WIDTH//2 - options_text.get_width()//2, SCREEN_HEIGHT//2+50))
-    screen.blit(exit_text, (SCREEN_WIDTH//2 - exit_text.get_width()//2, SCREEN_HEIGHT//2+100))
-    pygame.display.flip()
-
-def main_menu():
-    # Ensure music is started when entering the main menu.
-    if settings.get('music_enabled', True):
-        if settings.get('use_custom_music', False):
-            if not pygame.mixer.music.get_busy():
-                play_custom_music(settings)
-        else:
-            if not pygame.mixer.music.get_busy():
-                try:
-                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
-                    pygame.mixer.music.play(-1)  # Loop indefinitely
-                except Exception as e:
-                    print(f"Error loading default background music: {e}")
-
-    while True:
-        draw_main_menu()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type == MUSIC_END_EVENT:
-                # If using custom music, cycle to the next track.
-                if settings.get('use_custom_music', False) and custom_music_playlist:
-                    global current_track_index
-                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-                    try:
-                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
-                        pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when track ends
-                    except Exception as e:
-                        print(f"Error loading next track: {e}")
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:
-                    return
-                elif event.key == pygame.K_o:
-                    options_menu()
-                elif event.key == pygame.K_ESCAPE:
-                    save_settings(settings)
-                    pygame.quit()
-                    sys.exit()
-
-def pause_game():
-    global settings
-    pause_text = tetris_font_large.render("PAUSED", True, WHITE)
-    paused = True
-    pygame.event.clear(pygame.KEYDOWN)
-    
-    # Pause the music as soon as the game is paused
-    pygame.mixer.music.pause()
-    
-    while paused:
-        screen.fill(BLACK)
-        screen.blit(pause_text, (SCREEN_WIDTH//2 - pause_text.get_width()//2, SCREEN_HEIGHT//2))
-        pygame.display.flip()
-        for event in pygame.event.get():
-            if event.type==pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type==pygame.KEYDOWN:
-                if event.key==settings['controls']['pause'] or event.key==pygame.K_ESCAPE:
-                    paused = False
-                    
-    # Unpause the music when the game is resumed
-    pygame.mixer.music.unpause()
-
-def place_tetromino(tetromino, offset, grid, color_index):
-    for cy, row in enumerate(tetromino):
-        for cx, cell in enumerate(row):
-            if cell:
-                x = offset[0] + cx
-                y = offset[1] + cy
-                if 0 <= x < GRID_WIDTH and 0 <= y < GRID_HEIGHT:
-                    grid[y][x] = color_index
-
-# -------------------------- Menu System --------------------------
-def draw_main_menu():
-    screen.fill(BLACK)
-    title_text = tetris_font_large.render("TetraFusion", True, random.choice(COLORS))
-    start_text = tetris_font_medium.render("Press ENTER to Start", True, WHITE)
-    options_text = tetris_font_medium.render("Press O for Options", True, WHITE)
-    exit_text = tetris_font_medium.render("Press ESC to Quit", True, WHITE)
-    screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, SCREEN_HEIGHT//3))
-    screen.blit(start_text, (SCREEN_WIDTH//2 - start_text.get_width()//2, SCREEN_HEIGHT//2))
-    screen.blit(options_text, (SCREEN_WIDTH//2 - options_text.get_width()//2, SCREEN_HEIGHT//2+50))
-    screen.blit(exit_text, (SCREEN_WIDTH//2 - exit_text.get_width()//2, SCREEN_HEIGHT//2+100))
-    pygame.display.flip()
-
-def main_menu():
-    # Ensure music is started when entering the main menu.
-    if settings.get('music_enabled', True):
-        if settings.get('use_custom_music', False):
-            if not pygame.mixer.music.get_busy():
-                play_custom_music(settings)
-        else:
-            if not pygame.mixer.music.get_busy():
-                try:
-                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
-                    pygame.mixer.music.play(-1)  # Loop indefinitely
-                except Exception as e:
-                    print(f"Error loading default background music: {e}")
-
-    while True:
-        draw_main_menu()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type == MUSIC_END_EVENT:
-                # If using custom music, cycle to the next track.
-                if settings.get('use_custom_music', False) and custom_music_playlist:
-                    global current_track_index
-                    current_track_index = (current_track_index + 1) % len(custom_music_playlist)
-                    try:
-                        pygame.mixer.music.load(custom_music_playlist[current_track_index])
-                        pygame.mixer.music.play(0)  # Play once so MUSIC_END_EVENT fires when track ends
-                    except Exception as e:
-                        print(f"Error loading next track: {e}")
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN:
-                    return
-                elif event.key == pygame.K_o:
-                    options_menu()
-                elif event.key == pygame.K_ESCAPE:
-                    save_settings(settings)
-                    pygame.quit()
-                    sys.exit()
-
-def pause_game():
-    global settings
-    pause_text = tetris_font_large.render("PAUSED", True, WHITE)
-    paused = True
-    pygame.event.clear(pygame.KEYDOWN)
-    
-    # Pause the music as soon as the game is paused
-    pygame.mixer.music.pause()
-    
-    while paused:
-        screen.fill(BLACK)
-        screen.blit(pause_text, (SCREEN_WIDTH//2 - pause_text.get_width()//2, SCREEN_HEIGHT//2))
-        pygame.display.flip()
-        for event in pygame.event.get():
-            if event.type==pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            elif event.type==pygame.KEYDOWN:
-                if event.key==settings['controls']['pause'] or event.key==pygame.K_ESCAPE:
-                    paused = False
-                    
-    # Unpause the music when the game is resumed
-    pygame.mixer.music.unpause()
-
-def place_tetromino(tetromino, offset, grid, color_index):
-    for cy, row in enumerate(tetromino):
-        for cx, cell in enumerate(row):
-            if cell:
-                x = offset[0] + cx
-                y = offset[1] + cy
-                if 0 <= x < GRID_WIDTH and 0 <= y < GRID_HEIGHT:
-                    grid[y][x] = color_index
-
-# -------------------------- Menu System --------------------------
-def draw_main_menu(selected_index, menu_options):
-    """
-    Draws the main menu screen with a title and a list of selectable options.
-    The option at index 'selected_index' is highlighted.
-    """
-    screen.fill(BLACK)
-    title_text = tetris_font_large.render("TetraFusion", True, random.choice(COLORS))
-    # Draw title above the menu options.
-    screen.blit(title_text, (SCREEN_WIDTH//2 - title_text.get_width()//2, SCREEN_HEIGHT//3 - 100))
-    # Draw each menu option.
-    for i, option in enumerate(menu_options):
-        color = RED if i == selected_index else WHITE
-        option_text = tetris_font_medium.render(option, True, color)
-        x = SCREEN_WIDTH//2 - option_text.get_width()//2
-        y = SCREEN_HEIGHT//2 + i * 50
-        screen.blit(option_text, (x, y))
-    pygame.display.flip()
-
-def main_menu():
-    # Start background music if enabled.
-    if settings.get('music_enabled', True):
-        if settings.get('use_custom_music', False):
-            if not pygame.mixer.music.get_busy():
-                play_custom_music(settings)
-        else:
-            if not pygame.mixer.music.get_busy():
-                try:
-                    pygame.mixer.music.load(BACKGROUND_MUSIC_PATH)
-                    pygame.mixer.music.play(-1)
-                except Exception as e:
-                    print(f"Error loading default background music: {e}")
-    # Define the menu options.
-    menu_options = ["Start", "Options", "Quit"]
-    selected_index = 0
-    joy_delay = 150  # milliseconds
-    last_move = pygame.time.get_ticks()
-
-    while True:
-        draw_main_menu(selected_index, menu_options)
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                save_settings(settings)
-                pygame.quit()
-                sys.exit()
-            # --- Keyboard Input ---
-            elif event.type == pygame.KEYDOWN:
-                if event.key in (pygame.K_DOWN, pygame.K_s):
-                    selected_index = (selected_index + 1) % len(menu_options)
-                elif event.key in (pygame.K_UP, pygame.K_w):
-                    selected_index = (selected_index - 1) % len(menu_options)
-                elif event.key == pygame.K_RETURN:
-                    if menu_options[selected_index] == "Start":
-                        return
-                    elif menu_options[selected_index] == "Options":
-                        options_menu()
-                    elif menu_options[selected_index] == "Quit":
-                        save_settings(settings)
-                        pygame.quit()
-                        sys.exit()
-            # --- Joypad Hat (D-pad) Input ---
-            elif event.type == pygame.JOYHATMOTION:
-                cur_time = pygame.time.get_ticks()
-                if cur_time - last_move > joy_delay:
-                    hx, hy = event.value
-                    if hy == -1:
-                        selected_index = (selected_index + 1) % len(menu_options)
-                    elif hy == 1:
-                        selected_index = (selected_index - 1) % len(menu_options)
-                    last_move = cur_time
-            # --- Joypad Button Input (button 0 acts as select) ---
-            elif event.type == pygame.JOYBUTTONDOWN:
-                if event.button == 0:
-                    if menu_options[selected_index] == "Start":
-                        return
-                    elif menu_options[selected_index] == "Options":
-                        options_menu()
-                    elif menu_options[selected_index] == "Quit":
-                        save_settings(settings)
-                        pygame.quit()
-                        sys.exit()
-        clock.tick(30)
 
 
 # -------------------------- Game Loop --------------------------
