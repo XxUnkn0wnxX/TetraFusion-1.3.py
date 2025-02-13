@@ -1,3 +1,5 @@
+
+
 **TetraFusion** is a modern take on the classic Tetris game, implemented using Python and Pygame. This version introduces new difficulty settings, enhanced particle effects, an improved in-game interface, and expanded custom music support while keeping the timeless Tetris feel.
 
 ---
@@ -30,6 +32,12 @@
 Install dependencies using:
 
     pip install pygame mutagen
+
+if on macOS Also:
+
+```
+pip install pyobjc
+```
 
 ---
 
