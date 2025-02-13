@@ -101,6 +101,14 @@ if sys.platform == "win32":
 else:
     bdist_msi_options = {}
 
+# Set up the command class based on platform.
+cmdclass = {}
+if sys.platform.startswith("linux"):
+    # Use a Linux-friendly command alias
+    cmdclass["build_linux"] = CustomBuildExe
+else:
+    cmdclass["build_exe"] = CustomBuildExe
+
 # Setup configuration.
 setup(
     name="TetraFusion",
@@ -114,5 +122,5 @@ setup(
         "bdist_msi": bdist_msi_options,
     },
     executables=[exe],
-    cmdclass={"build_exe": CustomBuildExe},
+    cmdclass=cmdclass,
 )
