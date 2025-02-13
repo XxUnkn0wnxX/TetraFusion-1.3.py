@@ -145,7 +145,7 @@ If the file does not exist, it will be created automatically.
 
 ## Screenshots
 
-![Screenshot](./.screens/game.png)
+<img src="./.screens/game.png" alt="Screenshot" style="zoom: 40%;" />
 
 ---
 
