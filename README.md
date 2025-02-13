@@ -145,7 +145,7 @@ If the file does not exist, it will be created automatically.
 
 ## Screenshots
 
-<img src="./.screens/game.png" alt="Screenshot" style="zoom: 40%;" />
+<img src="./.screens/game.png" alt="Screenshot" style="width:60%;">
 
 ---
 
