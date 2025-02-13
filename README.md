@@ -26,6 +26,7 @@
 - **Python 3.7+**
 - **Pygame 2.0+**
 - **Mutagen (for audio metadata support)**
+- **Pyobjc (for macOS support)**
 
 Install dependencies using:
 
