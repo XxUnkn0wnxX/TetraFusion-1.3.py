@@ -121,8 +121,13 @@ else:
 # Always include "pygame" and "mutagen".
 includes = ["pygame", "mutagen"]
 if sys.platform == "darwin":
-    # When building on macOS, also include "pyobjc".
-    includes.append("pyobjc")
+    try:
+        # game uses NSOpenPanel and NSApplication from AppKit,
+        # include the AppKit module.
+        from AppKit import NSOpenPanel, NSApplication
+        includes.append("AppKit")
+    except ImportError:
+        print("Warning: pyobjc's AppKit module is not installed. Skipping inclusion of AppKit.")
 
 # Setup configuration.
 setup(
