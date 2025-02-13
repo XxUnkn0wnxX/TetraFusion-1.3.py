@@ -4,12 +4,19 @@ import re
 import shutil
 from cx_Freeze import setup, Executable, build_exe as _build_exe
 
-# Custom build_exe command that moves settings.py into the build folder.
+# If no command is provided, default based on the OS.
+if len(sys.argv) == 1:
+    if sys.platform.startswith("win"):
+        sys.argv.append("bdist_msi")
+    elif sys.platform == "darwin":
+        sys.argv.append("bdist_dmg")
+    elif sys.platform.startswith("linux"):
+        sys.argv.append("build_linux")
+
+# Custom build command that moves settings.py into the build folder.
 class CustomBuildExe(_build_exe):
     def run(self):
-        # Run the standard build_exe process.
         super().run()
-        # Determine the build directory used by cx_Freeze.
         build_dir = self.build_exe
         settings_path = "settings.py"
         if os.path.exists(settings_path):
@@ -36,24 +43,19 @@ with open("high_score.txt", "w") as f:
 # Check if we are building a DMG (for macOS)
 is_dmg = any("bdist_dmg" in arg for arg in sys.argv)
 
-# Read only the first line from TetraFusion.py to extract version.
+# Read the first line from TetraFusion.py to extract version.
 with open("TetraFusion.py", "r") as f:
     first_line = f.readline().strip()
 match = re.search(r'#\s*Game Ver:?\s*([\d\.]+)', first_line)
-if match:
-    version = match.group(1)
-else:
-    version = "0.0.0"
+version = match.group(1) if match else "0.0.0"
 
 # Determine the executable extension based on platform and build command.
-if sys.platform == "win32":
+if sys.platform.startswith("win"):
     exe_extension = ".exe"
 elif sys.platform == "darwin":
-    # For macOS: if building a DMG, the app bundle should have no extension;
-    # otherwise (e.g. in the build folder) use .exe to match the default naming.
+    # For macOS: if building a DMG, the app bundle should have no extension.
     exe_extension = "" if is_dmg else ".exe"
 else:
-    # For Linux, no extension.
     exe_extension = ""
 
 exe_name = f"TetraFusion {version}{exe_extension}"
@@ -68,16 +70,16 @@ include_files = [
 ]
 
 # On Windows, use the Win32 GUI base.
-base = "Win32GUI" if sys.platform == "win32" else None
+base = "Win32GUI" if sys.platform.startswith("win") else None
 exe = Executable(
     script="TetraFusion.py",
     base=base,
     target_name=exe_name,
-    icon="ICON1.ico",  # Set the application icon
+    icon="ICON1.ico",
 )
 
 # Configure MSI options and shortcuts only for Windows.
-if sys.platform == "win32":
+if sys.platform.startswith("win"):
     shortcut_table = [
         ("DesktopShortcut",     # Shortcut
          "DesktopFolder",       # Directory_
@@ -101,12 +103,14 @@ if sys.platform == "win32":
 else:
     bdist_msi_options = {}
 
-# Set up the command class based on platform.
+# For Linux, register a new command name "build_linux" that uses our custom build class.
 cmdclass = {}
 if sys.platform.startswith("linux"):
-    # Use a Linux-friendly command alias
-    cmdclass["build_linux"] = CustomBuildExe
+    class BuildLinux(CustomBuildExe):
+         description = "Build executable for Linux"
+    cmdclass["build_linux"] = BuildLinux
 else:
+    # For non-Linux platforms, use the standard build_exe command.
     cmdclass["build_exe"] = CustomBuildExe
 
 # Setup configuration.
@@ -115,7 +119,8 @@ setup(
     version=version,
     description="A Tetris-inspired game with custom features",
     options={
-        "build_exe": {
+        # The build options apply to the command that will be run.
+        ("build_exe" if not sys.platform.startswith("linux") else "build_linux"): {
             "include_files": include_files,
             "includes": ["pygame"],
         },
