@@ -29,7 +29,7 @@
 
 Install dependencies using:
 
-    pip install pygame mutagen
+    python3 -m pip install -r requirements.txt
 
 ---
 
@@ -38,8 +38,8 @@ Install dependencies using:
 1. **Clone the repository:**
 
    ```sh
-   git clone https://github.com/drDOOM69GAMING/TetraFusion.py.git  
-   cd TetraFusion.py
+   git clone https://github.com/XxUnkn0wnxX/TetraFusion.git
+   cd TetraFusion
    ```
 
 2. **Ensure the required assets are in place:**
