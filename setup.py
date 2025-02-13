@@ -5,6 +5,7 @@ import shutil
 from cx_Freeze import setup, Executable, build_exe as _build_exe
 
 # If no command is provided, default based on the OS.
+# This will auto-select the proper build command if the user runs "python3 setup.py" without arguments.
 if len(sys.argv) == 1:
     if sys.platform.startswith("win"):
         sys.argv.append("bdist_msi")
@@ -16,7 +17,9 @@ if len(sys.argv) == 1:
 # Custom build command that moves settings.py into the build folder.
 class CustomBuildExe(_build_exe):
     def run(self):
+        # Run the standard build_exe process.
         super().run()
+        # Determine the build directory used by cx_Freeze.
         build_dir = self.build_exe
         settings_path = "settings.py"
         if os.path.exists(settings_path):
@@ -75,11 +78,12 @@ exe = Executable(
     script="TetraFusion.py",
     base=base,
     target_name=exe_name,
-    icon="ICON1.ico",
+    icon="ICON1.ico",  # Set the application icon
 )
 
 # Configure MSI options and shortcuts only for Windows.
 if sys.platform.startswith("win"):
+    # Define the shortcut table for the MSI installer.
     shortcut_table = [
         ("DesktopShortcut",     # Shortcut
          "DesktopFolder",       # Directory_
@@ -89,7 +93,7 @@ if sys.platform.startswith("win"):
          None,  # Arguments
          None,  # Description
          None,  # Hotkey
-         None,  # Icon
+         None,  # Icon (explicit icon reference removed)
          None,  # IconIndex
          None,  # ShowCmd
          "TARGETDIR",  # Working directory
@@ -122,7 +126,7 @@ setup(
         # The build options apply to the command that will be run.
         ("build_exe" if not sys.platform.startswith("linux") else "build_linux"): {
             "include_files": include_files,
-            "includes": ["pygame"],
+            "includes": ["pygame", "mutagen"],  # Include necessary Python modules (module inclusions updated)
         },
         "bdist_msi": bdist_msi_options,
     },
