@@ -62,9 +62,17 @@ Install dependencies using:
 
 Run the main script using:
 
-    python "TetraFusion.py"
+    python3 TetraFusion.py
 
 ---
+
+## How to Build
+
+**Windows:** `python3 setup.py bdist_msi`
+
+**macOS:** `python3 setup.py bdist_dmg`
+
+**Linux:** `python3 setup.py build_linux`
 
 ## Controls
 
@@ -76,7 +84,7 @@ Run the main script using:
 - **Enter**: Start the game from the main menu.
 - **Hold (default: C)**: Hold the current tetromino for later use.
 - **Mouse Click (Subwindow)**: Adjust volume, skip tracks, or interact with on-screen buttons.
-- **Gamepad Support**: Joystick navigation and button mapping for key actions.
+- **Gamepad Support**: Dpad navigation and button mapping for key actions.
 
 ### Screens Overview
 
