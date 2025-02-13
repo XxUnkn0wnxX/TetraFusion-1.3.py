@@ -117,6 +117,13 @@ else:
     # For non-Linux platforms, use the standard build_exe command.
     cmdclass["build_exe"] = CustomBuildExe
 
+# Determine modules to include based on platform.
+# Always include "pygame" and "mutagen".
+includes = ["pygame", "mutagen"]
+if sys.platform == "darwin":
+    # When building on macOS, also include "pyobjc".
+    includes.append("pyobjc")
+
 # Setup configuration.
 setup(
     name="TetraFusion",
@@ -126,7 +133,7 @@ setup(
         # The build options apply to the command that will be run.
         ("build_exe" if not sys.platform.startswith("linux") else "build_linux"): {
             "include_files": include_files,
-            "includes": ["pygame", "mutagen"],  # Include necessary Python modules (module inclusions updated)
+            "includes": includes,
         },
         "bdist_msi": bdist_msi_options,
     },
