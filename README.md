@@ -145,7 +145,7 @@ If the file does not exist, it will be created automatically.
 
 ## Screenshots
 
-![Screenshot](https://github.com/user-attachments/assets/99c74b04-8674-4654-a3cf-da3fc935705b)
+![Screenshot](./.screens/game.png)
 
 ---
 
