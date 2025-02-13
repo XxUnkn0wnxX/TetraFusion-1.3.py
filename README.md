@@ -197,3 +197,4 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
 
 - Inspired by the classic Tetris game.
 - Thanks to the Pygame community for their continuous support and resources.
+- OpenAI For Code Fixes & Refactoring
