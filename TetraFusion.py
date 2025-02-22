@@ -1,4 +1,4 @@
-# Game Ver 1.9.3.1
+# Game Ver 1.9.3.2
 # Dependencies: pip install mutagen
 
 import pygame
@@ -17,7 +17,7 @@ pygame.init()
 pygame.mixer.set_num_channels(32)
 pygame.mixer.init()
 
-GAME_CAPTION = "TetraFusion 1.9.3.1"  # Moved to top
+GAME_CAPTION = "TetraFusion 1.9.3.2"  # Moved to top
 
 last_track_index = None  # Stores the current track index at game over.
 
@@ -293,8 +293,12 @@ skip_button_rect = None  # Only if custom music is enabled
 sound_bar_rect = None
 game_command = None  # "restart" or "menu" when a button is clicked
 
+import os, json, pygame
+
 # -------------------------- Settings System --------------------------
-# -------------------------- Load Json --------------------------
+
+import os, json, pygame
+
 def load_settings(filename="settings.json"):
     """Loads game settings from a JSON file, ensuring all required keys exist."""
     default_settings = {
@@ -309,21 +313,27 @@ def load_settings(filename="settings.json"):
             "skip_track": pygame.K_x
         },
         "controller_controls": {
-            "left": None,
-            "right": None,
-            "down": None,
-            "rotate": None,
-            "hard_drop": None,
-            "hold": None,
-            "pause": None,
-            "skip_track": None
+            "left": 14,
+            "right": 15,
+            "down": 13,
+            "rotate": 0,
+            "hard_drop": 1,
+            "hold": 2,
+            "pause": 3,
+            "skip_track": 4
         },
         "controller_menu_navigation": {
-        "up": None,
-        "down": None,
-        "select": None,
-        "back": None
-    },
+            "up": 11,
+            "down": 12,
+            "select": 0,
+            "back": 1
+        },
+        # New key for controller behavior settings:
+        "controller_settings": {
+            "analog_threshold": 0.5,
+            "joy_delay": 150,
+            "hat_threshold": 0.5
+        },
         "difficulty": "normal",
         "flame_trails": True,
         "grid_color": [200, 200, 200],
@@ -336,34 +346,46 @@ def load_settings(filename="settings.json"):
     }
 
     if not os.path.exists(filename):
-        save_settings(default_settings, filename)  # Save defaults if no file exists.
+        save_settings(default_settings, filename)
         return default_settings
 
     try:
         with open(filename, "r") as file:
             saved_settings = json.load(file)
 
-        # Ensure required keys exist:
+        # Ensure required keys exist.
         saved_settings.setdefault("controls", {})
         saved_settings.setdefault("controller_controls", default_settings["controller_controls"])
         saved_settings.setdefault("controller_menu_navigation", default_settings["controller_menu_navigation"])
+        saved_settings.setdefault("controller_settings", default_settings["controller_settings"])
 
-        # Convert string keys back to pygame key constants for controls.
+        # For controller_controls and menu navigation, ensure no key is left as None.
+        for key, default_val in default_settings["controller_controls"].items():
+            if saved_settings["controller_controls"].get(key) is None:
+                saved_settings["controller_controls"][key] = default_val
+        for key, default_val in default_settings["controller_menu_navigation"].items():
+            if saved_settings["controller_menu_navigation"].get(key) is None:
+                saved_settings["controller_menu_navigation"][key] = default_val
+        for key, default_val in default_settings["controller_settings"].items():
+            if saved_settings["controller_settings"].get(key) is None:
+                saved_settings["controller_settings"][key] = default_val
+
+        # Convert string keys back to pygame key constants for keyboard controls.
         for key, default_value in default_settings["controls"].items():
             if key in saved_settings["controls"]:
                 val = saved_settings["controls"][key]
-                if isinstance(val, str):  # Convert string to key constant.
+                if isinstance(val, str):
                     try:
                         saved_settings["controls"][key] = pygame.key.key_code(val.lower())
                     except KeyError:
                         print(f"Warning: Unrecognized key '{val}' in settings. Resetting to default.")
                         saved_settings["controls"][key] = default_value
-                elif not isinstance(val, int):  # If invalid, reset.
+                elif not isinstance(val, int):
                     saved_settings["controls"][key] = default_value
             else:
                 saved_settings["controls"][key] = default_value
 
-        # Ensure every key from default_settings exists in saved_settings.
+        # Ensure every key from default_settings exists.
         for key, default_value in default_settings.items():
             if key not in saved_settings:
                 saved_settings[key] = default_value
@@ -374,14 +396,14 @@ def load_settings(filename="settings.json"):
         print(f"Error loading settings ({e}), using defaults.")
         return default_settings
 
-# -------------------------- Save Json --------------------------
 def save_settings(settings, filename="settings.json"):
-    """Saves the game settings to a JSON file, ensuring key names are stored as strings."""
+    """Saves the game settings to a JSON file."""
     try:
         settings_to_save = {
             "controls": {control: pygame.key.name(key).upper() for control, key in settings["controls"].items()},
             "controller_controls": {control: settings["controller_controls"].get(control) for control in settings.get("controller_controls", {})},
             "controller_menu_navigation": {control: settings["controller_menu_navigation"].get(control) for control in settings.get("controller_menu_navigation", {})},
+            "controller_settings": settings.get("controller_settings", {}),
             "difficulty": settings.get("difficulty", "normal"),
             "flame_trails": settings.get("flame_trails", True),
             "grid_color": settings.get("grid_color", [200, 200, 200]),
@@ -1416,14 +1438,14 @@ def controller_keybinds_menu():
     # Ensure that a controller_controls dictionary exists in settings.
     if 'controller_controls' not in settings:
         settings['controller_controls'] = {
-            'left': None,
-            'right': None,
-            'down': None,
-            'rotate': None,
-            'hard_drop': None,
-            'hold': None,
-            'pause': None,
-            'skip_track': None
+            'left': 14,
+            'right': 15,
+            'down': 13,
+            'rotate': 0,
+            'hard_drop': 1,
+            'hold': 2,
+            'pause': 3,
+            'skip_track': 4
         }
 
     # Define your controller options.
@@ -1445,43 +1467,36 @@ def controller_keybinds_menu():
     option_spacing = 45
     base_y = 150  # starting vertical position for options
 
-    # --- Sub-Function: process_ctrl_nav_events ---
     def process_ctrl_nav_events(options, selected_option, changing_button, enter_pressed):
-        """
-        Processes both keyboard and controller (including D-pad) navigation events
-        for the controller keybinds menu. Returns updated values for selected_option,
-        changing_button, enter_pressed, and an action flag.
-        
-        NOTE:
-          - In this menu, controller keys CAN bind to controller_controls.
-          - Keyboard events are allowed for navigation and for triggering binding mode via Enter;
-            however, once binding mode is active (i.e. changing_button is not None), only
-            controller key inputs (JOYBUTTONDOWN) will update the binding.
-          - The action flag will be:
-              • "back" if the user wants to exit the menu,
-              • "menu_nav" if the user selects the "controller_menu_keybinds" option.
-          - If the "controller_menu_navigation" settings are not defined, then controller button
-            navigation via JOYBUTTONDOWN will not work—but D-pad (JOYHATMOTION) and keyboard navigation
-            will still be available.
-        """
         action = None  # Will hold the action if one is triggered.
         for event in pygame.event.get():
-            # ---------------------- QUIT EVENT ----------------------
             if event.type == pygame.QUIT:
                 save_settings(settings)
                 pygame.quit()
                 sys.exit()
-            # ---------------------- MUSIC END EVENT ----------------------
             elif event.type == MUSIC_END_EVENT:
                 handle_music_end_event()
-            # ---------------------- CONTROLLER EVENTS (JOYBUTTONDOWN) ----------------------
-            elif event.type == pygame.JOYBUTTONDOWN:
-                if changing_button is not None:
-                    # In binding mode: capture the controller button and update the binding.
+            # When in binding mode, capture not only button presses but also hat and axis events.
+            elif changing_button is not None:
+                if event.type == pygame.JOYBUTTONDOWN:
+                    # Use the button value as usual.
                     settings['controller_controls'][changing_button] = event.button
                     changing_button = None
-                else:
-                    # Not in binding mode: process navigation via controller buttons.
+                elif event.type == pygame.JOYHATMOTION:
+                    # If the hat has a non-zero value, store it as a tuple.
+                    if event.value != (0, 0):
+                        settings['controller_controls'][changing_button] = ("hat", event.value)
+                        changing_button = None
+                elif event.type == pygame.JOYAXISMOTION:
+                    # For analog stick events, only capture if value exceeds a threshold.
+                    analog_threshold = settings["controller_settings"].get("analog_threshold", 0.5)
+                    if event.axis in (0, 1) and abs(event.value) >= analog_threshold:
+                        direction = "positive" if event.value > 0 else "negative"
+                        settings['controller_controls'][changing_button] = ("axis", event.axis, direction)
+                        changing_button = None
+            else:
+                # Not in binding mode – process navigation.
+                if event.type == pygame.JOYBUTTONDOWN:
                     nav = settings.get("controller_menu_navigation", {})
                     up_btn = nav.get("up")
                     down_btn = nav.get("down")
@@ -1497,120 +1512,78 @@ def controller_keybinds_menu():
                         current_option = options[selected_option][0]
                         if current_option == 'back':
                             action = "back"
-                        elif current_option == 'controller_menu_keybinds':
-                            # New: trigger the menu navigation submenu.
-                            action = "menu_nav"
                         else:
-                            # Trigger binding capture for this option if it is bindable.
                             if current_option in settings['controller_controls']:
                                 changing_button = current_option
-            # ---------------------- D-PAD (JOYHATMOTION) NAVIGATION ----------------------
-            elif event.type == pygame.JOYHATMOTION:
-                if changing_button is None:
+                elif event.type == pygame.JOYHATMOTION:
                     hx, hy = event.value
                     if hy == 1:
                         selected_option = (selected_option - 1) % len(options)
                     elif hy == -1:
                         selected_option = (selected_option + 1) % len(options)
-            # ---------------------- KEYBOARD EVENTS (NAVIGATION) ----------------------
-            elif event.type == pygame.KEYDOWN:
-                # Keyboard navigation is allowed, but keyboard keys will not be used to bind.
-                if event.key == pygame.K_ESCAPE:
-                    if changing_button is not None:
-                        changing_button = None
-                    else:
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
                         action = "back"
-                elif changing_button is None:
-                    if event.key == pygame.K_UP:
+                    elif event.key == pygame.K_UP:
                         selected_option = (selected_option - 1) % len(options)
                     elif event.key == pygame.K_DOWN:
                         selected_option = (selected_option + 1) % len(options)
-                    # Use Enter to trigger binding capture (keyboard can trigger, but only controller keys will update).
                     elif event.key == pygame.K_RETURN and not enter_pressed:
                         enter_pressed = True
                         current_option = options[selected_option][0]
                         if current_option == 'back':
                             action = "back"
-                        elif current_option == 'controller_menu_keybinds':
-                            # Trigger menu navigation submenu from keyboard as well.
-                            action = "menu_nav"
                         else:
                             if current_option in settings['controller_controls']:
                                 changing_button = current_option
-            elif event.type == pygame.KEYUP:
-                if event.key == pygame.K_RETURN:
-                    enter_pressed = False
+                elif event.type == pygame.KEYUP:
+                    if event.key == pygame.K_RETURN:
+                        enter_pressed = False
         return selected_option, changing_button, enter_pressed, action
 
-    # ---------------------- MAIN LOOP FOR CONTROLLER KEYBINDS MENU ----------------------
     while True:
         screen.fill(BLACK)
         title_text = tetris_font_large.render("Controller Keybinds", True, WHITE)
-        scaled_title = pygame.transform.scale(
-            title_text,
-            (int(title_text.get_width() * 0.8), int(title_text.get_height() * 0.8))
-        )
-        screen.blit(
-            scaled_title,
-            (SCREEN_WIDTH // 2 - scaled_title.get_width() // 2, 50)
-        )
+        scaled_title = pygame.transform.scale(title_text, (int(title_text.get_width() * 0.8), int(title_text.get_height() * 0.8)))
+        screen.blit(scaled_title, (SCREEN_WIDTH // 2 - scaled_title.get_width() // 2, 50))
     
         # Render each controller option.
         for i, (key, label) in enumerate(controller_options):
-            # Overall color (red if selected, white otherwise).
             color = RED if i == selected_option else WHITE
-        
-            # Determine position
             y_coordinate = base_y + i * option_spacing
             x_center = SCREEN_WIDTH // 2
-        
-            # If it's bindable, split into label + button binding
             if key in bindable_keys:
-                # 1) label portion
                 label_text = label + ": "
                 label_surface = tetris_font_medium.render(label_text, True, color)
-
-                # 2) binding portion
                 current_binding = settings['controller_controls'].get(key)
-                if current_binding is not None:
-                    binding_str = f"Button {current_binding}"
-                else:
+                if current_binding is None:
                     binding_str = "(none)"
-            
-                # If currently capturing a new binding for this key => YELLOW
-                if changing_button == key:
-                    binding_color = YELLOW
+                elif isinstance(current_binding, tuple):
+                    # For hat or axis bindings, format them specially.
+                    if current_binding[0] == "hat":
+                        binding_str = f"Hat {current_binding[1]}"
+                    elif current_binding[0] == "axis":
+                        binding_str = f"Axis {current_binding[1]} {current_binding[2]}"
+                    else:
+                        binding_str = str(current_binding)
                 else:
-                    binding_color = color
-
+                    binding_str = f"Button {current_binding}"
+                binding_color = YELLOW if changing_button == key else color
                 binding_surface = tetris_font_medium.render(binding_str, True, binding_color)
-            
-                # Position them side by side
                 combined_width = label_surface.get_width() + binding_surface.get_width()
                 x_start = x_center - (combined_width // 2)
-            
-                # Blit them
                 screen.blit(label_surface, (x_start, y_coordinate))
                 screen.blit(binding_surface, (x_start + label_surface.get_width(), y_coordinate))
-        
             else:
-                # Non-bindable option => single string
-                display_text = label
-                option_text = tetris_font_medium.render(display_text, True, color)
-                x_pos = x_center - (option_text.get_width() // 2)
-                screen.blit(option_text, (x_pos, y_coordinate))
+                option_text = tetris_font_medium.render(label, True, color)
+                screen.blit(option_text, (x_center - option_text.get_width() // 2, y_coordinate))
     
         pygame.display.flip()
-
-        # Process events and handle actions.
-        selected_option, changing_button, enter_pressed, action = process_ctrl_nav_events(
-            controller_options, selected_option, changing_button, enter_pressed
-        )
+        selected_option, changing_button, enter_pressed, action = process_ctrl_nav_events(controller_options, selected_option, changing_button, enter_pressed)
         if action is not None:
             if action == "back":
                 return
             elif action == "menu_nav":
-                # Call the controller menu navigation bindings submenu.
                 controller_menu_nav_menu()
 
 # Options Controller Menu Keybinds
@@ -2017,6 +1990,7 @@ def run_game():
     fast_fall = False
     last_fall_time = pygame.time.get_ticks()
     game_over = False
+    # These flags will be updated by events or polling:
     left_pressed = False
     right_pressed = False
     last_horizontal_move = pygame.time.get_ticks()
@@ -2035,43 +2009,31 @@ def run_game():
 
     pygame.key.set_repeat(300, 100)
     last_joy_move = pygame.time.get_ticks()
-    joy_delay = 150  # milliseconds delay for analog stick movement
+    last_hat_move = pygame.time.get_ticks()  # For throttling D-Pad events
 
-    # =========================================================================
-    # tetromino Logic (hold, hard drop, line clearing, etc.)
-    # =========================================================================
+    # -------------------------- Helper Functions --------------------------
+
     def lock_and_update_tetromino(current_time):
         nonlocal tetromino, offset, score, game_over, grid, lines_cleared_total
-        global hold_used  # 'hold_used' is global
+        global hold_used
         nonlocal pieces_dropped, screen_shake, is_tetris, tetris_last_flash, level
         nonlocal fall_speed, transition_start_time, last_flash_time, flash_count
         nonlocal next_tetromino, shape_index, color_index, tetromino_bag
-        # Use current_time to help with timing-dependent effects.
-
-        # Calculate how far the tetromino can fall (for a hard drop).
         hard_drop_rows = 0
         temp_offset = offset.copy()
         while valid_position(tetromino, [temp_offset[0], temp_offset[1] + 1], grid):
             temp_offset[1] += 1
             hard_drop_rows += 1
         offset[1] = temp_offset[1]
-
-        # Update score based on drop distance.
         score += hard_drop_rows * 2
-
-        # Generate dust particles for visual effect.
         for _ in range(20 + hard_drop_rows * 5):
             dust_particles.append(DustParticle(
                 (offset[0] + random.uniform(-1, len(tetromino[0]) + 1)) * BLOCK_SIZE,
                 (offset[1] + len(tetromino)) * BLOCK_SIZE
             ))
-
-        # Check if dropping results in game over.
         if check_game_over(grid):
             game_over = True
             return
-
-        # Lock tetromino: record its position and update grid.
         original_grid = [row[:] for row in grid]
         place_tetromino(tetromino, offset, grid, color_index)
         hold_used = False
@@ -2079,8 +2041,6 @@ def run_game():
         lines_cleared_total += lines_cleared
         score = update_score(score, lines_cleared)
         pieces_dropped += 1
-
-        # Trigger screen shake and explosion effects if lines were cleared.
         if lines_cleared > 0:
             screen_shake = 8 + lines_cleared * 3
             full_lines = [y for y in range(GRID_HEIGHT) if all(original_grid[y])]
@@ -2095,39 +2055,30 @@ def run_game():
                             max_speed=15,
                             duration=75
                         ))
-
-        # Check for a Tetris (clearing 4 lines at once).
         if lines_cleared == 4:
             is_tetris = True
             tetris_last_flash = current_time
-
-        # Level up if enough lines have been cleared.
         new_level = lines_cleared_total // 10 + 1
         if new_level > level:
             level = new_level
             fall_speed = max(50, int(base_fall_speed * (0.85 ** (level - 1))))
+            nonlocal in_level_transition
             in_level_transition = True
             transition_start_time = current_time
             last_flash_time = current_time
             flash_count = 0
-
-        # Update tetromino for the next piece.
         tetromino = next_tetromino
         shape_index = get_shape_index(tetromino) or 0
         color_index = (shape_index + level - 1) % len(COLORS) + 1
         next_tetromino = tetromino_bag.get_next_tetromino()
-        offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
+        offset[:] = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
 
-    # =========================================================================
-    # Helper function: Process keyboard events using settings['controls']
-    # =========================================================================
     def process_keyboard_events(events, current_time):
         nonlocal left_pressed, right_pressed, fast_fall, offset, tetromino, last_horizontal_move
         nonlocal shape_index, color_index, score, level, next_tetromino, tetromino_bag
         global game_command, hold_used, hold_piece
         for event in events:
             if event.type == pygame.KEYDOWN:
-                # ------------------ Keyboard: Movement ------------------
                 if event.key == controls['left']:
                     left_pressed = True
                     new_x = offset[0] - 1
@@ -2142,7 +2093,6 @@ def run_game():
                     last_horizontal_move = current_time
                 elif event.key == controls['down']:
                     fast_fall = True
-                # ------------------ Keyboard: Rotation, Hard Drop, and Hold ------------------
                 elif event.key == controls['rotate']:
                     rotated, new_offset = rotate_tetromino_with_kick(tetromino, offset, grid)
                     tetromino, offset = rotated, new_offset
@@ -2154,17 +2104,16 @@ def run_game():
                             tetromino = tetromino_bag.get_next_tetromino()
                             shape_index = get_shape_index(tetromino) or 0
                             color_index = (shape_index + level - 1) % len(COLORS) + 1
-                            offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
+                            offset[:] = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
                         else:
                             tetromino, hold_piece = copy.deepcopy(hold_piece), copy.deepcopy(tetromino)
                             shape_index = get_shape_index(tetromino) or 0
                             color_index = (shape_index + level - 1) % len(COLORS) + 1
-                            offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
-                elif event.key == controls['pause']:
-                    pause_game()
+                            offset[:] = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
                 elif event.key == controls['hard_drop']:
                     lock_and_update_tetromino(current_time)
-                # ------------------ Keyboard: Skip Track (Music Control) ------------------
+                elif event.key == controls['pause']:
+                    pause_game()
                 elif controls.get('skip_track') and event.key == controls['skip_track']:
                     game_command = "skip"
             elif event.type == pygame.KEYUP:
@@ -2175,16 +2124,17 @@ def run_game():
                 elif event.key == controls['down']:
                     fast_fall = False
 
-    # =========================================================================
-    # Helper function: Process controller events using settings['controller_controls']
-    # =========================================================================
     def process_controller_events(events, current_time):
-        nonlocal left_pressed, right_pressed, offset, tetromino, last_horizontal_move
-        nonlocal shape_index, color_index, next_tetromino, tetromino_bag, fast_fall
+        nonlocal left_pressed, right_pressed, offset, tetromino, last_horizontal_move, fast_fall
+        nonlocal shape_index, color_index, next_tetromino, tetromino_bag, last_joy_move, last_hat_move, level
         global game_command, hold_used, hold_piece
+        analog_threshold = settings["controller_settings"].get("analog_threshold", 0.5)
+        joy_delay = settings["controller_settings"].get("joy_delay", 150)
+        hat_threshold = settings["controller_settings"].get("hat_threshold", 0.5)
+        hat_delay = settings["controller_settings"].get("hat_delay", 150)
+        analog_deadzone = settings["controller_settings"].get("analog_deadzone", 0.3)
         for event in events:
             if event.type == pygame.JOYBUTTONDOWN:
-                # ------------------ Controller: Digital Button Controls ------------------
                 if cc.get('left') is not None and event.button == cc.get('left'):
                     left_pressed = True
                     new_x = offset[0] - 1
@@ -2198,7 +2148,7 @@ def run_game():
                         offset[0] = new_x
                     last_horizontal_move = current_time
                 elif cc.get('down') is not None and event.button == cc.get('down'):
-                    fast_fall = True  # Set fast fall when button is pressed
+                    fast_fall = True
                 elif cc.get('rotate') is not None and event.button == cc.get('rotate'):
                     rotated, new_offset = rotate_tetromino_with_kick(tetromino, offset, grid)
                     tetromino, offset = rotated, new_offset
@@ -2212,18 +2162,17 @@ def run_game():
                             tetromino = tetromino_bag.get_next_tetromino()
                             shape_index = get_shape_index(tetromino) or 0
                             color_index = (shape_index + level - 1) % len(COLORS) + 1
-                            offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
+                            offset[:] = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
                         else:
                             tetromino, hold_piece = copy.deepcopy(hold_piece), copy.deepcopy(tetromino)
                             shape_index = get_shape_index(tetromino) or 0
                             color_index = (shape_index + level - 1) % len(COLORS) + 1
-                            offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
+                            offset[:] = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
                 elif cc.get('pause') is not None and event.button == cc.get('pause'):
                     pause_game()
                 elif cc.get('skip_track') is not None and event.button == cc.get('skip_track'):
                     game_command = "skip"
             elif event.type == pygame.JOYBUTTONUP:
-                # ------------------ Controller: Button Release (reset flags) ------------------
                 if cc.get('left') is not None and event.button == cc.get('left'):
                     left_pressed = False
                 elif cc.get('right') is not None and event.button == cc.get('right'):
@@ -2231,79 +2180,83 @@ def run_game():
                 elif cc.get('down') is not None and event.button == cc.get('down'):
                     fast_fall = False
             elif event.type == pygame.JOYHATMOTION:
-                # ------------------ Controller: D-Pad Fallback for Movement ------------------
-                hx, hy = event.value
-                if hx < 0:
-                    left_pressed = True
-                    new_x = offset[0] - 1
-                    if valid_position(tetromino, [new_x, offset[1]], grid):
-                        offset[0] = new_x
-                    last_horizontal_move = current_time
-                elif hx > 0:
-                    right_pressed = True
-                    new_x = offset[0] + 1
-                    if valid_position(tetromino, [new_x, offset[1]], grid):
-                        offset[0] = new_x
-                    last_horizontal_move = current_time
-                # D-Pad vertical for fast fall:
-                if hy < 0:
-                    fast_fall = True
-                elif hy >= 0:
-                    fast_fall = False
+                if settings["controller_settings"].get("use_dpad", True):
+                    if current_time - last_hat_move > hat_delay:
+                        last_hat_move = current_time
+                        hx, hy = event.value
+                        if hx <= -hat_threshold:
+                            left_pressed = True
+                            new_x = offset[0] - 1
+                            if valid_position(tetromino, [new_x, offset[1]], grid):
+                                offset[0] = new_x
+                            last_horizontal_move = current_time
+                        elif hx >= hat_threshold:
+                            right_pressed = True
+                            new_x = offset[0] + 1
+                            if valid_position(tetromino, [new_x, offset[1]], grid):
+                                offset[0] = new_x
+                            last_horizontal_move = current_time
+                        if hy <= -hat_threshold:
+                            fast_fall = True
+                        else:
+                            fast_fall = False
+            elif event.type == pygame.JOYAXISMOTION:
+                if event.axis == 0:
+                    if abs(event.value) < analog_deadzone:
+                        # If within deadzone, do not trigger movement.
+                        pass
+                    else:
+                        if event.value <= -analog_threshold:
+                            if current_time - last_joy_move > joy_delay:
+                                new_x = offset[0] - 1
+                                if valid_position(tetromino, [new_x, offset[1]], grid):
+                                    offset[0] = new_x
+                                last_joy_move = current_time
+                        elif event.value >= analog_threshold:
+                            if current_time - last_joy_move > joy_delay:
+                                new_x = offset[0] + 1
+                                if valid_position(tetromino, [new_x, offset[1]], grid):
+                                    offset[0] = new_x
+                                last_joy_move = current_time
+                elif event.axis == 1:
+                    if event.value >= analog_threshold:
+                        fast_fall = True
+                    else:
+                        fast_fall = False
 
-    # =========================================================================
-    # Helper function: Process mouse events for UI elements (sound bar, buttons, etc.)
-    # =========================================================================
     def process_mouse_events(events):
         global game_command
         for event in events:
             if event.type == pygame.MOUSEBUTTONDOWN:
-                # Only process events on the subwindow side
                 if event.pos[0] >= SCREEN_WIDTH:
                     rel_x = event.pos[0] - SCREEN_WIDTH
                     rel_y = event.pos[1]
-
-                    # 1) Volume Bar
                     if sound_bar_rect and sound_bar_rect.collidepoint(rel_x, rel_y):
                         new_volume = (rel_x - sound_bar_rect.x) / sound_bar_rect.width
                         pygame.mixer.music.set_volume(new_volume)
-
-                    # 2) Restart Button
                     if restart_button_rect and restart_button_rect.collidepoint(rel_x, rel_y):
                         game_command = "restart"
-                        return  # can exit early if you like
-
-                    # 3) Skip Button (only if custom music is on AND skip_button_rect is set)
+                        return
                     if settings.get('use_custom_music', False) and skip_button_rect:
                         if skip_button_rect.collidepoint(rel_x, rel_y):
                             game_command = "skip"
-
-                    # 4) Menu Button (ALWAYS check for menu_button_rect)
                     if menu_button_rect and menu_button_rect.collidepoint(rel_x, rel_y):
                         game_command = "menu"
-
-            # Handle dragging volume bar, etc.
             elif event.type == pygame.MOUSEMOTION:
                 if event.buttons[0]:
                     if event.pos[0] >= SCREEN_WIDTH:
                         rel_x = event.pos[0] - SCREEN_WIDTH
-                        rel_y = event.pos[1]
-                        if sound_bar_rect and sound_bar_rect.collidepoint(rel_x, rel_y):
+                        if sound_bar_rect and sound_bar_rect.collidepoint(rel_x, event.pos[1]):
                             new_volume = (rel_x - sound_bar_rect.x) / sound_bar_rect.width
                             pygame.mixer.music.set_volume(new_volume)
 
-    # =========================================================================
-    # Main Game Loop
-    # =========================================================================
+    # ------------------------------ Main Loop ------------------------------
     while True:
         current_time = pygame.time.get_ticks()
-
-        # ------------------------------ Screen Shake Effect ------------------------------
         shake_intensity = screen_shake * 2
         shake_x = random.randint(-shake_intensity, shake_intensity) if screen_shake > 0 else 0
         shake_y = random.randint(-shake_intensity, shake_intensity) if screen_shake > 0 else 0
 
-        # ------------------------------ Game Over Check ------------------------------
         if game_over:
             if heartbeat_playing and heartbeat_sound:
                 heartbeat_sound.stop()
@@ -2315,7 +2268,6 @@ def run_game():
             display_game_over(score)
             return
 
-        # ------------------------------ Level Transition Handling ------------------------------
         if in_level_transition:
             if current_time - transition_start_time > TRANSITION_DURATION:
                 in_level_transition = False
@@ -2334,8 +2286,7 @@ def run_game():
                     last_flash_time = current_time
                     flash_count += 1
 
-        # ------------------------------ Process All Events (Keyboard, Controller, Mouse) ------------------------------
-        events = pygame.event.get()  # Grab all events once per frame.
+        events = pygame.event.get()
         for event in events:
             if event.type == pygame.QUIT:
                 save_settings(settings)
@@ -2347,14 +2298,13 @@ def run_game():
         process_controller_events(events, current_time)
         process_mouse_events(events)
 
-        # Check for special commands (restart, return to menu, or skip track).
-        if game_command == "restart" or game_command == "menu":
-            return  # Exit run_game() to restart or return to the main menu.
+        if game_command in ("restart", "menu"):
+            return
         elif game_command == "skip":
-            skip_current_track()   # Change the track.
-            game_command = None      # Reset the command.
+            skip_current_track()
+            game_command = None
 
-        # ------------------------------ Process Continuous Movement (Held Buttons) ------------------------------
+        # Process continuous movement from events.
         if left_pressed or right_pressed:
             time_since_last_move = current_time - last_horizontal_move
             required_delay = fast_move_interval if time_since_last_move > move_interval else move_interval
@@ -2365,7 +2315,6 @@ def run_game():
                     offset[0] = new_x
                 last_horizontal_move = current_time
 
-        # ------------------------------ Tetromino Falling ------------------------------
         current_fall_speed = 50 if fast_fall else fall_speed
         if current_time - last_fall_time > current_fall_speed:
             if valid_position(tetromino, [offset[0], offset[1] + 1], grid):
@@ -2410,10 +2359,30 @@ def run_game():
                     shape_index = get_shape_index(tetromino) or 0
                     color_index = (shape_index + level - 1) % len(COLORS) + 1
                     next_tetromino = tetromino_bag.get_next_tetromino()
-                    offset = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
+                    offset[:] = [GRID_WIDTH // 2 - len(tetromino[0]) // 2, 0]
             last_fall_time = current_time
 
-        # ------------------------------ Spawn Flame Trail Particles (Visual Effects) ------------------------------
+        # --- Poll Joystick for Flame Effects and Movement Correction ---
+        if joy is not None:
+            axis_val = joy.get_axis(0)
+            hat_x = joy.get_hat(0)[0] if joy.get_numhats() > 0 else 0
+            analog_threshold = settings["controller_settings"].get("analog_threshold", 0.5)
+            deadzone = settings["controller_settings"].get("analog_deadzone", 0.3)
+            # Compute inputs based solely on current joystick state.
+            if abs(axis_val) < deadzone:
+                poll_left = False
+                poll_right = False
+            else:
+                poll_left = axis_val <= -analog_threshold
+                poll_right = axis_val >= analog_threshold
+            if settings["controller_settings"].get("use_dpad", True):
+                poll_left = poll_left or (hat_x <= -settings["controller_settings"].get("hat_threshold", 0.5))
+                poll_right = poll_right or (hat_x >= settings["controller_settings"].get("hat_threshold", 0.5))
+            # Override left/right flags from polling (do not OR with previous event state).
+            left_pressed = poll_left
+            right_pressed = poll_right
+
+        # ------------------------------ Spawn Flame Trail Particles ------------------------------
         if flame_trails_enabled and (left_pressed or right_pressed or fast_fall):
             num_particles = random.randint(3, 5)
             spawn_offset = 15
@@ -2426,13 +2395,13 @@ def run_game():
                     direction = "right"
                     spawn_x = (offset[0] + len(tetromino[0])) * BLOCK_SIZE + random.randint(0, spawn_offset)
                     spawn_y = (offset[1] + random.uniform(0.2, 0.8) * len(tetromino)) * BLOCK_SIZE
-                else:  # fast falling vertical movement
+                else:
                     direction = "down"
                     spawn_x = (offset[0] + random.uniform(0.2, 0.8) * len(tetromino[0])) * BLOCK_SIZE
                     spawn_y = (offset[1] + len(tetromino)) * BLOCK_SIZE - spawn_offset
                 trail_particles.append(TrailParticle(spawn_x, spawn_y, direction))
 
-        # ------------------------------ Update Particles (Trails, Dust, Explosions) ------------------------------
+        # ------------------------------ Update Particles ------------------------------
         wind_force = ((-4.0 if left_pressed else 4.0 if right_pressed else 0),
                       (5.0 if fast_fall else 0))
         for particle in trail_particles[:]:
@@ -2451,7 +2420,7 @@ def run_game():
         # ------------------------------ Update Screen Shake ------------------------------
         screen_shake = max(0, screen_shake - 1)
 
-        # ------------------------------ Danger Zone: Heartbeat Sound if Grid Almost Full ------------------------------
+        # ------------------------------ Danger Zone: Heartbeat Sound ------------------------------
         if is_danger_zone_active(grid):
             if not heartbeat_playing and heartbeat_sound:
                 heartbeat_sound.play(-1)
@@ -2461,11 +2430,9 @@ def run_game():
                 heartbeat_sound.stop()
                 heartbeat_playing = False
 
-        # ------------------------------ Draw Everything on the Screen ------------------------------
-        # Clear the screen.
+        # ------------------------------ Draw Everything ------------------------------
         screen.fill(BLACK)
         if not in_level_transition:
-            # Draw all placed blocks from the grid.
             for y in range(GRID_HEIGHT):
                 for x in range(GRID_WIDTH):
                     if grid[y][x]:
@@ -2473,7 +2440,6 @@ def run_game():
                                       x * BLOCK_SIZE + shake_x,
                                       y * BLOCK_SIZE + shake_y,
                                       BLOCK_SIZE)
-            # Draw the current falling tetromino.
             for cy, row in enumerate(tetromino):
                 for cx, cell in enumerate(row):
                     if cell:
@@ -2481,12 +2447,9 @@ def run_game():
                                       (offset[0] + cx) * BLOCK_SIZE + shake_x,
                                       (offset[1] + cy) * BLOCK_SIZE + shake_y,
                                       BLOCK_SIZE)
-            # Overlay the grid lines.
             screen.blit(grid_surface, (shake_x, shake_y))
-            # Draw the ghost piece.
             if settings.get('ghost_piece', True):
                 draw_ghost_piece(tetromino, offset, grid, COLORS[color_index - 1])
-            # Draw explosion effects and particles.
             for explosion in explosion_particles:
                 explosion.draw(screen, (shake_x, shake_y))
             for particle in trail_particles:
@@ -2494,7 +2457,6 @@ def run_game():
             for particle in dust_particles:
                 particle.draw(screen)
         else:
-            # During level transitions, draw the grid blocks with an overlay.
             for y in range(GRID_HEIGHT):
                 for x in range(GRID_WIDTH):
                     if grid[y][x]:
@@ -2511,13 +2473,11 @@ def run_game():
             level_shake_y = random.randint(-10, 10)
             screen.blit(level_text, (SCREEN_WIDTH // 2 - level_text.get_width() // 2 + level_shake_x,
                                      SCREEN_HEIGHT // 2 - level_text.get_height() // 2 + level_shake_y))
-        # Draw the subwindow with game info.
         draw_subwindow(score, next_tetromino, level, pieces_dropped, lines_cleared_total,
                        is_tetris, tetris_last_flash, tetris_flash_time)
         pygame.display.flip()
 
         clock.tick(60)
-        
 # -------------------------- Main --------------------------
 def main():
     global settings, game_command, hold_piece, hold_used
